@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Litigation Tracker</title>
+<link rel="icon" href="static/litigation_tracker.ico">
+<link rel="stylesheet" href="static/app.css">
+<script id="data" type="application/json">{{DATA}}</script>
+<script src="static/views.js" defer></script>
+<script src="static/app.js" defer></script>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <span class="logo-tile" id="logo-tile"><img id="logo" src="{{LOGO}}" alt="Callagy Law"></span>
+    <div>
+      <h1>Litigation Tracker</h1>
+      <p>How courts rule when providers try to enforce No Surprises Act arbitration awards</p>
+    </div>
+  </div>
+  <div class="top-right">
+    <p class="asof" id="asof"></p>
+    <button type="button" id="signup-btn" class="signup-btn" aria-expanded="false" aria-controls="signup-pop" hidden>Get the newsletter</button>
+    <div id="signup-pop" class="signup-pop" role="dialog" aria-label="Newsletter sign-up" hidden>
+      <p class="signup-title">Litigation Tracker newsletter</p>
+      <p class="muted small">A short email on the days there are new rulings or cases.</p>
+      <label class="small" for="signup-email">Your work email</label>
+      <input id="signup-email" type="email" autocomplete="email">
+      <p id="signup-msg" class="small" role="status"></p>
+      <div class="signup-actions">
+        <button type="button" id="signup-yes" class="signup-primary">Sign up</button>
+        <button type="button" id="signup-no" class="ins-clear" hidden>Unsubscribe</button>
+        <button type="button" id="signup-close" class="ins-clear">Close</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div id="refresh-banner" class="refresh-banner" role="status" hidden>
+  <span id="refresh-text">New data is available.</span>
+  <button type="button" id="refresh-btn" class="signup-primary">Refresh</button>
+</div>
+
+<nav class="tabs" role="tablist" aria-label="Court system">
+  <button role="tab" id="tab-state" data-tab="state" aria-controls="content" aria-selected="true">State courts</button>
+  <button role="tab" id="tab-federal" data-tab="federal" aria-controls="content" aria-selected="false" tabindex="-1">Federal courts</button>
+</nav>
+
+<div class="layout" id="content" role="tabpanel">
+  <main>
+    <section class="card map-card">
+      <div class="strip" id="strip"></div>
+      <div class="map-controls">
+        <div class="view-switch" id="view-switch" role="radiogroup" aria-label="Which federal decisions to map" hidden>
+          <button role="radio" data-view="federal" aria-checked="true">All decisions</button>
+          <button role="radio" data-view="appellate" aria-checked="false">Appellate or controlling authority only</button>
+        </div>
+        <label class="circuit-toggle" id="circuit-toggle" hidden><input type="checkbox" id="circuit-check" checked> Show circuits</label>
+        <details class="ins-filter" id="ins-filter">
+          <summary>Insurers: <strong id="ins-label">All</strong></summary>
+          <div class="ins-pop">
+            <input id="ins-search" type="search" placeholder="Search insurers" aria-label="Search insurers">
+            <ul id="ins-list" aria-label="Insurers"></ul>
+            <button type="button" id="ins-clear" class="ins-clear">Clear selection</button>
+          </div>
+        </details>
+      </div>
+      <p id="ins-note" class="muted small" role="status"></p>
+      <div class="map-wrap">
+        <svg id="map" viewBox="0 0 1000 610" aria-label="United States map"></svg>
+        <div id="tooltip" class="tooltip" role="status" hidden></div>
+      </div>
+      <div class="legend" id="legend"></div>
+      <p class="footnote" id="footnote"></p>
+      <details class="table-view" id="circuit-list" hidden>
+        <summary>States in each federal circuit</summary>
+        <div id="circuit-states"></div>
+      </details>
+      <details class="table-view">
+        <summary>Table view</summary>
+        <div id="table"></div>
+      </details>
+      <details class="table-view">
+        <summary id="cases-summary">All cases in this view</summary>
+        <input id="cases-search" class="res-search" type="search" placeholder="Search cases: name, court, state, insurer, result"
+               aria-label="Search cases in this view" title="Newest first: decision date for rulings, filing date for pending cases">
+        <div id="cases"></div>
+      </details>
+    </section>
+
+    <section class="card">
+      <details class="about">
+        <summary><h2>Department of Labor actions <span id="dol-count" class="muted"></span></h2></summary>
+        <div id="dol"></div>
+      </details>
+    </section>
+
+    <section class="card">
+      <h2>Data notes</h2>
+      <div id="notes"></div>
+    </section>
+
+    <section class="card">
+      <details class="about">
+        <summary><h2>About this data</h2></summary>
+        <div id="about"></div>
+      </details>
+    </section>
+  </main>
+
+  <div class="side">
+    <section class="card latest" aria-labelledby="latest-title">
+      <h2 id="latest-title">Latest rulings</h2>
+      <p class="muted small" id="latest-sub">Newest first, for the tab, view and insurers chosen.</p>
+      <ol id="latest"></ol>
+      <button type="button" id="latest-more" class="ins-clear" hidden>Show 5 more</button>
+    </section>
+    <aside class="card resources" aria-labelledby="res-title">
+      <h2 id="res-title">Resources</h2>
+      <p class="muted small">Court opinions, agency updates and news, newest first. Click one to open or download it.</p>
+      <input id="res-search" class="res-search" type="search" placeholder="Search resources" aria-label="Search resources" hidden>
+      <p id="res-count" class="muted small" aria-live="polite"></p>
+      <ul id="resources"></ul>
+    </aside>
+  </div>
+</div>
+
+<div class="backdrop" id="backdrop" hidden></div>
+<aside class="panel" id="panel" role="dialog" aria-modal="true" aria-labelledby="panel-title" hidden>
+  <div class="panel-head">
+    <div>
+      <h2 id="panel-title"></h2>
+      <p id="panel-sub" class="muted"></p>
+    </div>
+    <button class="close" id="panel-close" aria-label="Close">&times;</button>
+  </div>
+  <div id="panel-body"></div>
+</aside>
+</body>
+</html>

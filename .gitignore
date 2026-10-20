@@ -1,0 +1,32 @@
+# The repository is PUBLIC (GitHub). Only the program, its tests, its documentation and the website in docs\
+# (built by app\publish.py, private data left out) are tracked. Everything below stays on the H: drive only.
+CLAUDE.md
+app/tools/callagy_cases.sql
+review-board-*.md
+reports/
+resources/
+callagy/
+auto/
+To check/
+State cases/
+drafts/
+logs/
+newsletter/
+assets/
+video-howto-*/
+Daily Update/
+*.exe
+*.lock
+*.bak
+*.tmp
+~$*
+Thumbs.db
+desktop.ini
+
+# Python and build leftovers
+.venv/
+__pycache__/
+.pytest_cache/
+build/
+dist/
+*.spec
