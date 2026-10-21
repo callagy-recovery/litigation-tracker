@@ -1,5 +1,6 @@
 """The public website (app/publish.py -> docs\\): nothing private in it, and its in-page insurer filter
 (app/static/views.js) gives exactly what the dashboard's own Python (data.views) gives."""
+import io
 import json
 import re
 import shutil
@@ -81,7 +82,11 @@ def test_push_sends_changes_only_from_main(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "ROOT", proj)
     monkeypatch.setattr(publish, "publish", lambda: site.parent.mkdir(exist_ok=True) or site.write_text(site.name + "x", encoding="utf-8"))
     monkeypatch.setenv("GITHUB_TOKEN", "github_pat_test")
-    assert publish.push("Daily update 1") == "website updated on GitHub"
+    assert publish.push("Daily update 1") == "website updated on GitHub"  # a local remote: no build request
+    asked = []
+    monkeypatch.setattr(publish.urllib.request, "urlopen", lambda req, timeout: asked.append(req.full_url) or io.BytesIO())
+    assert publish.request_build("https://github.com/callagy-recovery/litigation-tracker.git", "t") == ""
+    assert asked == ["https://api.github.com/repos/callagy-recovery/litigation-tracker/pages/builds"]
     assert git("ls-tree", "-r", "--name-only", "main", cwd=remote).split() == [".gitignore", "docs/index.html"]
     monkeypatch.setattr(publish, "publish", lambda: None)
     assert publish.push("Daily update 2") == "website already up to date on GitHub"

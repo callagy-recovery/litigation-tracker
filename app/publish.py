@@ -12,6 +12,7 @@ import os
 import re
 import subprocess
 import sys
+import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -139,7 +140,24 @@ def push(message):
     p = git("-c", "credential.helper=", "push", "-q", "origin", "main", env=env)
     if p.returncode:
         raise RuntimeError("git push failed: " + p.stderr.replace(token, "[token]").replace(basic, "[token]").strip()[-300:])
-    return "website updated on GitHub" if changed else "website already up to date on GitHub"
+    if not changed:
+        return "website already up to date on GitHub"
+    return "website updated on GitHub" + request_build(git("remote", "get-url", "origin").stdout.strip(), token)
+
+
+def request_build(remote, token):
+    """Ask GitHub Pages to build the site now: a push does not always start a build by itself. Returns "" when the
+    build was requested, or a note saying why not (the push itself has worked either way)."""
+    m = re.search(r"github\.com[/:]([^/]+)/([^/]+?)(?:\.git)?$", remote)
+    if not m:
+        return ""  # not a GitHub repository (the tests' stand-in)
+    req = urllib.request.Request(f"https://api.github.com/repos/{m[1]}/{m[2]}/pages/builds", method="POST", headers={
+        "Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"})
+    try:
+        urllib.request.urlopen(req, timeout=30).close()
+        return ""
+    except OSError as e:  # urllib's HTTPError and URLError are OSErrors
+        return f" (the site rebuild could not be requested: {e}; GitHub usually rebuilds by itself)"
 
 
 if __name__ == "__main__":
