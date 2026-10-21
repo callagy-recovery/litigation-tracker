@@ -35,7 +35,7 @@ $daily = Join-Path $root 'Daily Update'
 & $py -m PyInstaller --noconfirm --clean --onefile --console `
     --name 'Litigation Tracker Daily Update' `
     --icon (Join-Path $root 'app\static\litigation_tracker.ico') `
-    --paths (Join-Path $root 'app') --paths (Join-Path $root 'app\tools') --hidden-import to_check --hidden-import state_cases --hidden-import newsletter --hidden-import signups --hidden-import PIL.Image `
+    --paths (Join-Path $root 'app') --paths (Join-Path $root 'app\tools') --hidden-import to_check --hidden-import state_cases --hidden-import newsletter --hidden-import signups --hidden-import publish --hidden-import PIL.Image `
     --distpath $daily --workpath $work --specpath $work `
     (Join-Path $root 'app\daily_update.py')
 if ($LASTEXITCODE -ne 0) { throw 'PyInstaller failed (daily update).' }

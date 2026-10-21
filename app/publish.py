@@ -6,9 +6,11 @@ The page is the same dashboard with its data built in, so it needs no server and
 not for the public (main.page_data(published=True)): the Callagy case counts, files from H: (Resources that link to
 public sources stay), the sign-up code and the notes about the H: drive. Search engines are asked not to list it.
 """
+import base64
 import json
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -108,6 +110,36 @@ def publish(out=None):
         if not any(d.iterdir()):
             d.rmdir()
     return sorted(written)
+
+
+PUBLIC_PATHS = ["docs", "app", "tests", "README.md", "requirements.txt", ".gitignore"]  # .gitignore still applies
+GIT = ["git", "-c", "safe.directory=*", "-c", "user.name=Litigation Tracker daily update",
+       "-c", "user.email=litigation-tracker@users.noreply.github.com"]
+
+
+def push(message):
+    """Build the website, then commit what changed (the site, and any program change) and push it to the public GitHub
+    repository (origin, branch main). Returns a one-line result; raises RuntimeError when the push fails. The token is
+    the GITHUB_TOKEN user variable, handed to git for this push only: never printed or stored in git's settings."""
+    publish()
+    git = lambda *a, **kw: subprocess.run(GIT + list(a), cwd=main.ROOT, capture_output=True, text=True, **kw)  # noqa: E731
+    branch = git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+    if branch != "main":  # e.g. local-history, which must never reach GitHub
+        return f"website built in docs\\, not pushed: the project is on branch {branch or '?'}, not main"
+    token = os.environ.get("GITHUB_TOKEN")
+    if not token:
+        return "website built in docs\\, not pushed: no GITHUB_TOKEN user variable on this computer"
+    git("add", "-A", "--", *PUBLIC_PATHS)
+    changed = git("diff", "--cached", "--quiet").returncode == 1
+    if changed:
+        git("commit", "-q", "-m", message)
+    basic = base64.b64encode(f"x-access-token:{token}".encode()).decode()
+    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "GIT_CONFIG_COUNT": "1",
+           "GIT_CONFIG_KEY_0": "http.https://github.com/.extraheader", "GIT_CONFIG_VALUE_0": f"AUTHORIZATION: basic {basic}"}
+    p = git("-c", "credential.helper=", "push", "-q", "origin", "main", env=env)
+    if p.returncode:
+        raise RuntimeError("git push failed: " + p.stderr.replace(token, "[token]").replace(basic, "[token]").strip()[-300:])
+    return "website updated on GitHub" if changed else "website already up to date on GitHub"
 
 
 if __name__ == "__main__":

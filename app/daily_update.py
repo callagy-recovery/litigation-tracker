@@ -1001,6 +1001,15 @@ def run(a, token, gi_key):
     except Exception as e:  # Outlook missing or closed: the rest of the run still counts
         notes.append(f"Newsletter: skipped ({e}).")
         say(f"  skipped: {e}")
+    say("\nWebsite (GitHub Pages)…")
+    try:
+        os.environ["LT_ROOT"] = str(ROOT)  # before publish imports main, which otherwise looks next to this exe
+        import publish
+        say("  " + publish.push(f"Daily update {found['lastRun'][:16].replace('T', ' ')}"))
+    except Exception as e:  # no git, no network, GitHub down: the H: dashboard is up to date regardless
+        log.exception("Website update failed")
+        notes.append(f"Website: not updated ({e}). The H: dashboard is up to date.")
+        say(f"  not updated: {e}")
 
     say("\n" + "=" * 60 + "\nDone.")
     for k, v in summary.items():

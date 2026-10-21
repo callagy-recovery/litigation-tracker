@@ -26,7 +26,9 @@ import resources  # noqa: E402
 import signups  # noqa: E402
 
 FROZEN = getattr(sys, "frozen", False)
-ROOT = Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parent.parent
+# LT_ROOT: set by the daily update, whose exe sits one folder down (Daily Update\), when it builds the website.
+ROOT = (Path(os.environ["LT_ROOT"]) if os.environ.get("LT_ROOT") else
+        Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parent.parent)
 STATIC = ROOT / "app" / "static"
 REPORTS, RESOURCES, ASSETS, LOGS = ROOT / "reports", ROOT / "resources", ROOT / "assets", ROOT / "logs"
 CALLAGY = ROOT / "callagy"  # CSV export of app/tools/callagy_cases.sql (also accepted in reports\)

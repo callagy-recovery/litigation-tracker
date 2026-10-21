@@ -65,6 +65,34 @@ def test_staff_names_and_internal_paths_are_reworded():
                                           "Items still under review are in an internal file.", "Clinic a/s/o *** v. Plan"]}
 
 
+@pytest.mark.skipif(shutil.which("git") is None, reason="git not installed")
+def test_push_sends_changes_only_from_main(tmp_path, monkeypatch):
+    import publish
+    remote, proj = tmp_path / "remote.git", tmp_path / "proj"
+    git = lambda *a, cwd=proj: subprocess.run(publish.GIT + list(a), cwd=cwd, capture_output=True, text=True, check=True).stdout  # noqa: E731
+    git("init", "-q", "--bare", str(remote), cwd=tmp_path)
+    proj.mkdir()
+    git("init", "-q", "-b", "main")
+    git("remote", "add", "origin", str(remote))
+    (proj / ".gitignore").write_text("CLAUDE.md\n", encoding="utf-8")
+    (proj / "CLAUDE.md").write_text("private", encoding="utf-8")
+    (proj / "notes.txt").write_text("not a public path", encoding="utf-8")
+    site = proj / "docs" / "index.html"
+    monkeypatch.setattr(main, "ROOT", proj)
+    monkeypatch.setattr(publish, "publish", lambda: site.parent.mkdir(exist_ok=True) or site.write_text(site.name + "x", encoding="utf-8"))
+    monkeypatch.setenv("GITHUB_TOKEN", "github_pat_test")
+    assert publish.push("Daily update 1") == "website updated on GitHub"
+    assert git("ls-tree", "-r", "--name-only", "main", cwd=remote).split() == [".gitignore", "docs/index.html"]
+    monkeypatch.setattr(publish, "publish", lambda: None)
+    assert publish.push("Daily update 2") == "website already up to date on GitHub"
+    assert git("rev-list", "--count", "main", cwd=remote).strip() == "1"
+    git("checkout", "-q", "-b", "local-history")
+    assert "not pushed" in publish.push("Daily update 3")
+    monkeypatch.delenv("GITHUB_TOKEN")
+    git("checkout", "-q", "main")
+    assert "no GITHUB_TOKEN" in publish.push("Daily update 4")
+
+
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js not installed")
 @pytest.mark.skipif(not REPORT.exists(), reason="acceptance report not in reports\\")
 def test_the_in_page_filter_matches_the_python_one(tmp_path):

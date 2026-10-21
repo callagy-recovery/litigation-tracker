@@ -1716,6 +1716,21 @@
    "payer": "Anthem Health Plans of Virginia, Inc.",
    "docketId": "74974633",
    "status": "New enforcement suit found by the daily update; no ruling yet."
+  },
+  {
+   "case": "SpecialtyCare Inc v. Cigna Healthcare Inc",
+   "court": "Court of Appeals for the Third Circuit",
+   "level": "Federal Appellate",
+   "circuit": "3",
+   "state": "PA",
+   "docket": "26-1768",
+   "url": "https://www.courtlistener.com/docket/73195129/specialtycare-inc-v-cigna-healthcare-inc/",
+   "payer": "Cigna Healthcare Inc",
+   "byHand": true,
+   "toCheck": "docket:73195129",
+   "filed": "2026-04-15",
+   "docketId": "73195129",
+   "status": "Checked by a person: an enforcement suit with no ruling yet."
   }
  ],
  "ended": [
@@ -2070,5 +2085,5 @@
    "url": "https://www.cms.gov/files/document/caa-nsa-issuer-requirements-checklist.pdf"
   }
  ],
- "lastRun": "2026-10-20T10:34:03"
+ "lastRun": "2026-10-21T09:15:53"
 }
