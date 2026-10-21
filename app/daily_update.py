@@ -880,6 +880,14 @@ def main(argv=None):
         release_lock()
 
 
+def update_website(message):
+    """Rebuild the public website from the project's data and push what changed to GitHub (publish.push). The tests
+    replace this (tests\\conftest.py): a test run must never publish anything."""
+    os.environ["LT_ROOT"] = str(ROOT)  # before publish imports main, which otherwise looks next to this exe
+    import publish
+    return publish.push(message)
+
+
 def run(a, token, gi_key):
     """One daily update, holding the run lock. Progress is saved after every step and every document read, and again
     if anything goes wrong, so a crash loses at most the item being read."""
@@ -1003,9 +1011,7 @@ def run(a, token, gi_key):
         say(f"  skipped: {e}")
     say("\nWebsite (GitHub Pages)…")
     try:
-        os.environ["LT_ROOT"] = str(ROOT)  # before publish imports main, which otherwise looks next to this exe
-        import publish
-        say("  " + publish.push(f"Daily update {found['lastRun'][:16].replace('T', ' ')}"))
+        say("  " + update_website(f"Daily update {found['lastRun'][:16].replace('T', ' ')}"))
     except Exception as e:  # no git, no network, GitHub down: the H: dashboard is up to date regardless
         log.exception("Website update failed")
         notes.append(f"Website: not updated ({e}). The H: dashboard is up to date.")

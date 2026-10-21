@@ -156,6 +156,14 @@ short summary; press Enter to close it. Open dashboards then show a *New data is
 5. **Not confirmed goes on that day's To check list.** Anything the readers could not agree on, could not read, or
    where the ruling has no free copy, goes into `To check\To check YYYY-MM-DD.xlsx` for a person. So does a later
    ruling in a case the report has already decided. If there is nothing to check, no file is made.
+6. **Updates the website** (https://callagy-recovery.github.io/litigation-tracker/, for staff without the H: drive). It
+   rebuilds `docs\` (`app\publish.py`: patient initials masked, no Callagy case counts, no H:-only files, staff names
+   in notes reworded) and pushes what changed, with any program change, to the public GitHub repository
+   `callagy-recovery/litigation-tracker`. GitHub only shows the files; it runs nothing. This needs git and the
+   `GITHUB_TOKEN` Windows user variable (a fine-grained token for that repository only: Contents and Pages, read and
+   write; it expires after a year and is then replaced). If the push fails, the window says so; the H: dashboard is
+   up to date regardless. Only the `main` branch is ever pushed; `local-history` (the history before the repository
+   went public) stays on H:.
 
 Anything not reached in one run (Claude's usage limit, CourtListener's 125 searches a day) is simply done on the next
 run; nothing needs to be done by hand. The report always wins: a ruling or case the report already has is not added
