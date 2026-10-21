@@ -123,7 +123,7 @@ def push(message):
     the GITHUB_TOKEN user variable, handed to git for this push only: never printed or stored in git's settings."""
     publish()
     git = lambda *a, **kw: subprocess.run(GIT + list(a), cwd=main.ROOT, capture_output=True, text=True, **kw)  # noqa: E731
-    branch = git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+    branch = git("symbolic-ref", "--short", "-q", "HEAD").stdout.strip()
     if branch != "main":  # e.g. local-history, which must never reach GitHub
         return f"website built in docs\\, not pushed: the project is on branch {branch or '?'}, not main"
     token = os.environ.get("GITHUB_TOKEN")
