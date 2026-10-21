@@ -129,7 +129,7 @@ def push(message):
     token = os.environ.get("GITHUB_TOKEN")
     if not token:
         return "website built in docs\\, not pushed: no GITHUB_TOKEN user variable on this computer"
-    git("add", "-A", "--", *PUBLIC_PATHS)
+    git("add", "-A", "--", *[p for p in PUBLIC_PATHS if (main.ROOT / p).exists()])  # a missing path fails the add
     changed = git("diff", "--cached", "--quiet").returncode == 1
     if changed:
         git("commit", "-q", "-m", message)
