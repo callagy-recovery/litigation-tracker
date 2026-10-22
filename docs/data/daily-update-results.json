@@ -1718,6 +1718,84 @@
    "status": "New enforcement suit found by the daily update; no ruling yet."
   },
   {
+   "case": "SpecialtyCare Inc v. Kaiser Foundation Health Plan of Washington Inc",
+   "court": "District Court, W.D. Washington",
+   "level": "Federal District",
+   "circuit": "9",
+   "state": "WA",
+   "filed": "2024-12-23",
+   "docket": "2:24-cv-02127",
+   "url": "https://www.courtlistener.com/?type=r&q=docket_id%3A69493060",
+   "payer": "Kaiser Foundation Health Plan of Washington Inc",
+   "docketId": "69493060",
+   "status": "New enforcement suit found by the daily update; no ruling yet."
+  },
+  {
+   "case": "SpecialtyCare Inc. v. Oscar Insurance Company of Florida",
+   "court": "District Court, S.D. Florida",
+   "level": "Federal District",
+   "circuit": "11",
+   "state": "FL",
+   "filed": "2025-12-08",
+   "docket": "1:25-cv-25733",
+   "url": "https://www.courtlistener.com/?type=r&q=docket_id%3A72005850",
+   "payer": "Oscar Insurance Company of Florida",
+   "docketId": "72005850",
+   "status": "New enforcement suit found by the daily update; no ruling yet."
+  },
+  {
+   "case": "SpecialtyCare Inc. v. Providence Health Plan",
+   "court": "District Court, D. Oregon",
+   "level": "Federal District",
+   "circuit": "9",
+   "state": "OR",
+   "filed": "2024-12-30",
+   "docket": "3:24-cv-02165",
+   "url": "https://www.courtlistener.com/?type=r&q=docket_id%3A69506442",
+   "payer": "Providence Health Plan",
+   "docketId": "69506442",
+   "status": "New enforcement suit found by the daily update; no ruling yet."
+  },
+  {
+   "case": "SpecialtyCare, Inc. v. UnitedHealthcare, Inc.",
+   "court": "District Court, D. Minnesota",
+   "level": "Federal District",
+   "circuit": "8",
+   "state": "MN",
+   "filed": "2024-12-11",
+   "docket": "0:24-cv-04455",
+   "url": "https://www.courtlistener.com/?type=r&q=docket_id%3A69462766",
+   "payer": "UnitedHealthcare, Inc.",
+   "docketId": "69462766",
+   "status": "New enforcement suit found by the daily update; no ruling yet."
+  },
+  {
+   "case": "T.V. Seshan, M.D., P.C. v. Elevance Health, Inc.",
+   "court": "District Court, S.D. New York",
+   "level": "Federal District",
+   "circuit": "2",
+   "state": "NY",
+   "filed": "2025-11-17",
+   "docket": "7:25-cv-09593",
+   "url": "https://www.courtlistener.com/?type=r&q=docket_id%3A71923659",
+   "payer": "Elevance Health, Inc.",
+   "docketId": "71923659",
+   "status": "New enforcement suit found by the daily update; no ruling yet."
+  },
+  {
+   "case": "VIP PLASTIC SURGERY LLC v. OSCAR HEALTH INC.",
+   "court": "District Court, D. New Jersey",
+   "level": "Federal District",
+   "circuit": "3",
+   "state": "NJ",
+   "filed": "2025-09-29",
+   "docket": "3:25-cv-16081",
+   "url": "https://www.courtlistener.com/?type=r&q=docket_id%3A71488568",
+   "payer": "OSCAR HEALTH INC.",
+   "docketId": "71488568",
+   "status": "New enforcement suit found by the daily update; no ruling yet."
+  },
+  {
    "case": "SpecialtyCare Inc v. Cigna Healthcare Inc",
    "court": "Court of Appeals for the Third Circuit",
    "level": "Federal Appellate",
@@ -2085,5 +2163,5 @@
    "url": "https://www.cms.gov/files/document/caa-nsa-issuer-requirements-checklist.pdf"
   }
  ],
- "lastRun": "2026-10-21T09:15:53"
+ "lastRun": "2026-10-22T10:37:16"
 }

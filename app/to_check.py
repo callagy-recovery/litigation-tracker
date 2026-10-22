@@ -55,7 +55,7 @@ def save(root, store):
     p = Path(root) / "auto" / STORE
     tmp = p.with_suffix(".tmp")
     tmp.write_text(json.dumps(store, indent=1, ensure_ascii=False), encoding="utf-8")
-    os.replace(tmp, p)
+    data.swap_in(tmp, p)
 
 
 def item(key, kind, why, row, readers=""):

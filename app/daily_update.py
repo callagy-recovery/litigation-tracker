@@ -87,7 +87,7 @@ def save_json(path, obj):
     """Write to a temporary file, then swap it in, so the dashboard never reads half a file."""
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(obj, indent=1, ensure_ascii=False), encoding="utf-8")
-    os.replace(tmp, path)
+    data.swap_in(tmp, path)
 
 
 # ---------------- order text ----------------

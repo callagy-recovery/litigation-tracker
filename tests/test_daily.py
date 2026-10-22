@@ -2,6 +2,7 @@
 what it found with the report."""
 import datetime as dt
 import json
+import os
 
 import pytest
 
@@ -746,6 +747,24 @@ def test_a_to_check_file_open_in_excel_does_not_lose_rows(tmp_path, monkeypatch)
     with pytest.raises(PermissionError):
         tc.add(tmp_path, store, [tc.item("docket:3", "New case", "why", {**CASE, "docketId": "3"})], today)
     assert "docket:3" not in store  # not recorded as asked, so it is asked again next run
+
+
+def test_a_file_held_for_a_moment_is_still_saved(tmp_path, monkeypatch):
+    real, held = os.replace, [2]
+
+    def replace(src, dst):  # "Access is denied" twice, as when the file server is scanning the file
+        if held[0]:
+            held[0] -= 1
+            raise PermissionError(5, "Access is denied")
+        return real(src, dst)
+    monkeypatch.setattr(data.os, "replace", replace)
+    monkeypatch.setattr(data.time, "sleep", lambda s: None)
+    import daily_update
+    daily_update.save_json(tmp_path / "state.json", {"a": 1})
+    assert json.loads((tmp_path / "state.json").read_text(encoding="utf-8")) == {"a": 1} and held == [0]
+    held[0] = 99  # held for good: the error still stops the run (and its progress is saved by the caller)
+    with pytest.raises(PermissionError):
+        daily_update.save_json(tmp_path / "state.json", {"a": 2})
 
 
 def test_a_data_file_that_cannot_be_read_is_never_saved_over(tmp_path, monkeypatch):

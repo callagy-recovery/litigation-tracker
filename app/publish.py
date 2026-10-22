@@ -33,7 +33,7 @@ def _write(path, content):
         tmp.write_bytes(content)
     else:
         tmp.write_text(content, encoding="utf-8")
-    os.replace(tmp, path)
+    main.data.swap_in(tmp, path)
 
 
 DATA_XLSX = "data/litigation-tracker-data.xlsx"  # a neutral name: the report's own file name is not published

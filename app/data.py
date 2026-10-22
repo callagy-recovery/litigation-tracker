@@ -6,8 +6,10 @@ import csv
 import datetime as dt
 import json
 import logging
+import os
 import re
 import shutil
+import time
 from pathlib import Path
 
 import openpyxl
@@ -95,6 +97,18 @@ def load_callagy(*folders):
                 unplaced.append(d.get("docket") or "(no docket)")
     return {"file": files[-1].name, "byState": by_state, "byInsurer": by_insurer, "total": sum(by_state.values()) + len(unplaced),
             "unplaced": unplaced}
+
+
+def swap_in(tmp, path, tries=10):
+    """os.replace(tmp, path), tried again for up to 5 seconds: on the network share Windows can hold a file for a
+    moment just after it was written or read (antivirus, the file server's own scan), which gives "Access is denied"."""
+    for i in range(tries):
+        try:
+            return os.replace(tmp, path)
+        except PermissionError:
+            if i == tries - 1:
+                raise
+            time.sleep(0.5)
 
 
 class DataFileError(Exception):
