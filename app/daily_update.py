@@ -194,9 +194,13 @@ def write_summaries(report, limit=MAX_SUMMARIES, newest=SUMMARY_NEWEST):
         say(f"  summarising: {d['case'][:70]} ({d['date']})")
         try:
             text = ruling_text(url)
-        except RuntimeError as e:  # CourtListener's request limit: nothing is recorded, so it is tried again next run
-            say(f"    stopped: {e}. The rest are written next run.")
-            break
+        except RuntimeError as e:  # nothing is recorded, so it is tried again next run
+            if "429" in str(e) or "rate limited" in str(e):  # CourtListener's request limit: stop for today
+                say(f"    stopped: {e}. The rest are written next run.")
+                break
+            say(f"    skipped: {e} (this ruling's copy could not be fetched)")  # e.g. a 404: only this one
+            done["no readable copy"] += 1
+            continue
         try:
             res = reader.summarise(text, d["case"], d["date"], outcome)
         except reader.Declined:  # this ruling only

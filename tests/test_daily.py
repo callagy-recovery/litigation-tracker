@@ -278,6 +278,28 @@ def test_summaries_show_only_for_the_outcome_they_were_written_for(tmp_path):
     assert decisions[0]["summary"] == "Confirmed a/s/o ***'s award." and "summary" not in decisions[1] and "summary" not in decisions[2]
 
 
+def test_a_missing_ruling_copy_skips_only_that_ruling(tmp_path, monkeypatch):
+    import daily_update as du
+    monkeypatch.setattr(du, "AUTO", tmp_path)
+    monkeypatch.setattr(du, "SUMMARY_SOURCES", tmp_path / "summary_sources.json")
+    pdf = "https://storage.courtlistener.com/recap/gov.uscourts.njd.1/gov.uscourts.njd.1.{}.0.pdf"
+    decisions = {f"N{n}": {"docket": f"2:25-cv-0010{n}", "date": f"2026-09-0{n}", "case": f"Clinic {n} v. Plan", "win": False,
+                           "url": pdf.format(n)} for n in (1, 2, 3)}
+    report = {"decisions": decisions, "views": {v: {"caseIds": ["N3", "N2", "N1"]} for v in ("state", "federal", "appellate")}}
+    errors = {pdf.format(3): "HTTP 404 from www.courtlistener.com"}  # the newest one's page is gone
+
+    def text(url):
+        if url in errors:
+            raise RuntimeError(errors[url])
+        return "order text"
+    monkeypatch.setattr(du, "ruling_text", text)
+    monkeypatch.setattr(reader, "summarise", lambda *a: {"agreed": True, "summary": "Dismissed."})
+    assert du.write_summaries(report) == {"written": 2, "could not agree": 0, "no readable copy": 1}
+    errors[pdf.format(1)] = errors[pdf.format(2)] = "HTTP 429 from www.courtlistener.com"
+    (tmp_path / data.SUMMARY_FILE).unlink()
+    assert du.write_summaries(report) == {"written": 0, "could not agree": 0, "no readable copy": 1}  # 429: stop for today
+
+
 def test_only_links_the_update_can_read_are_used_for_summaries():
     import daily_update
     assert daily_update.readable("https://storage.courtlistener.com/recap/gov.uscourts.ctd.1/gov.uscourts.ctd.1.25.0.pdf")
