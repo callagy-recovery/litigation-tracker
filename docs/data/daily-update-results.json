@@ -63,6 +63,22 @@
    "final": false,
    "holding": "The New York trial court denied Excellus's motion to dismiss, holding that the NSA does not prohibit a provider from enforcing IDR awards through state-law claims and that the contract and quasi-contract claims were adequately pleaded.",
    "rounds": 1
+  },
+  {
+   "case": "ELITE NEUROPHYSIOLOGY LLC v. BLUE CROSS BLUE SHIELD OF ILLINOIS",
+   "court": "District Court, D. New Jersey",
+   "level": "Federal District",
+   "circuit": "3",
+   "state": "NJ",
+   "date": "2025-08-18",
+   "docket": "2:25-cv-01735",
+   "payer": "BLUE CROSS BLUE SHIELD OF ILLINOIS",
+   "url": "https://storage.courtlistener.com/recap/gov.uscourts.njd.563930/gov.uscourts.njd.563930.14.0.pdf",
+   "source": "CourtListener docket entry",
+   "result": "Loss",
+   "final": true,
+   "holding": "The court dismissed the provider's action to confirm two NSA IDR awards without prejudice because it lacked personal jurisdiction over the Illinois insurer, and it denied the cross-motion to confirm.",
+   "rounds": 1
   }
  ],
  "pending": [
@@ -1809,6 +1825,19 @@
    "filed": "2026-04-15",
    "docketId": "73195129",
    "status": "Checked by a person: an enforcement suit with no ruling yet."
+  },
+  {
+   "case": "SpecialtyCare, Inc. v. Anthem Health Plans of Kentucky, Inc.",
+   "court": "District Court, W.D. Kentucky",
+   "level": "Federal District",
+   "circuit": "6",
+   "state": "KY",
+   "filed": "2026-10-23",
+   "docket": "3:26-cv-00882",
+   "url": "https://www.courtlistener.com/docket/75013626/specialtycare-inc-v-anthem-health-plans-of-kentucky-inc/",
+   "payer": "Anthem Health Plans of Kentucky, Inc.",
+   "docketId": "75013626",
+   "status": "New enforcement suit found by the daily update; no ruling yet."
   }
  ],
  "ended": [
@@ -2163,5 +2192,5 @@
    "url": "https://www.cms.gov/files/document/caa-nsa-issuer-requirements-checklist.pdf"
   }
  ],
- "lastRun": "2026-10-26T09:47:04"
+ "lastRun": "2026-10-27T09:23:53"
 }
