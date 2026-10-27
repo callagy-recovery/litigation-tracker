@@ -6,14 +6,13 @@ state or keep a dispute in arbitration.
 
 ## Using it
 
-- **First time:** double-click `Litigation Tracker.exe` in `\\crfiles\ALL\Litigation Tracker` (H: drive). It puts a
-  **Litigation Tracker** shortcut on your desktop and opens the dashboard in your browser.
-- **After that:** use the desktop shortcut. If the dashboard is already running, the shortcut just opens it again.
+- **Open it from Callagy Hub** (its link starts `Litigation Tracker.exe` in `\\crfiles\ALL\Litigation Tracker`). The
+  dashboard opens in your browser. If it is already running, the link just opens it again. The app makes no desktop
+  shortcut (removed 2026-10-27); a shortcut left on a desktop from before still works, but Callagy Hub is the way in.
 - **Refresh the browser** to pick up a newly saved report or article. You don't need to restart it.
 - **An open page checks for new data** every 5 minutes and when you switch back to it. When there's a new report, article, Callagy list or daily update, a yellow banner says *New data is available* with a **Refresh** button. If the dashboard has closed itself after an hour of no use, the banner says so.
-- The dashboard stops on its own after 60 minutes with no activity. Use the shortcut to start it again.
+- The dashboard stops on its own after 60 minutes with no activity. Open it from Callagy Hub to start it again.
 - It works offline and sends nothing outside your computer.
-- If the shortcut is deleted, running the exe again recreates it.
 
 ## Adding a report
 
@@ -171,8 +170,9 @@ twice. Data notes show when the update last ran, and warn if it has not run for 
 
 ## To check (answers from a person)
 
-One file, `To check\To check.xlsx`, has one row per case or ruling: the case, court, date, a link, why it needs a
-person, what the readers found, and *Added on* (the day the daily update found it). Each run adds its new rows at the
+One file, `To check\To check.xlsx`, has one row per case or ruling: the case, court, docket number, date, a link, why
+it needs a person, what the readers found, and *Added on* (the day the daily update found it). Check a saved page's
+docket number against the row before answering: a plaintiff often has several cases against the same insurer. Each run adds its new rows at the
 bottom. (Until 2026-10-27 each day had its own file; those were merged into this one and are kept in `To check\Done\`.)
 
 1. Open the link and pick **Your answer**: *Pending case* (an enforcement suit, no ruling yet), *Win* or *Loss* (a ruling
@@ -184,7 +184,11 @@ bottom. (Until 2026-10-27 each day had its own file; those were merged into this
 3. The next daily update puts the answers on the dashboard, marked **Checked by a person**, and moves answered rows to
    the file's **Settled** sheet. It also settles rows by itself when it finds the answer: a ruling both readers agree
    on, a first filing both confirm, a settlement or voluntary dismissal, or a case that is not an enforcement suit. The
-   reason is in the Note. Cases with no free first filing are looked up again once a week. To change any answer, change
+   reason is in the Note. A District of New Jersey case listed in the court's stay order of Jan 16, 2026 (Schedule A,
+   329 suits to enforce IDR awards, stayed pending the lead case East Coast Plastic Surgery v. Aetna, 25-15052; list in
+   `app\nj_stay.py`) is settled as a *Pending case* and shown on the dashboard marked **From court order** (a ruling or
+   an ending found for it comes first). A ruling read in the lead case is called out in the run's summary.
+   Cases with no free first filing are looked up again once a week. To change any answer, change
    it on the Settled sheet. *Leave out* takes the case off and it is not asked again. The To check sheet only holds
    open work.
 
@@ -250,7 +254,7 @@ libraries and no CDN.
 | Path | What it is |
 |---|---|
 | `app\launcher.py` | What `Litigation Tracker.exe` runs: loads the dashboard code below from the share at each start, with a built-in backup copy |
-| `app\main.py` | Launcher: desktop shortcut, single instance, server bound to 127.0.0.1, idle shutdown, logo colours, refresh check, sign-up |
+| `app\main.py` | Launcher: single instance, server bound to 127.0.0.1, idle shutdown, logo colours, refresh check, sign-up |
 | `app\data.py` | Finds and reads the report, masking, circuits, colour bands, counts, merging the daily update's finds |
 | `app\insurers.py` | Insurer names: standard names and payer types |
 | `app\resources.py` | Resources scan and title extraction |

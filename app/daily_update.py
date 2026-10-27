@@ -32,6 +32,7 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE / "tools"))
 import data  # noqa: E402
 import insurers  # noqa: E402
+import nj_stay  # noqa: E402
 import reader  # noqa: E402
 import state_cases  # noqa: E402
 import to_check  # noqa: E402
@@ -156,14 +157,36 @@ def readable(url):
 
 def ruling_text(url):
     """The text of a ruling at url. A CourtListener opinion page is read through its API (the page itself is not for
-    scripts, and its text loads separately); anything else as a PDF or court web page."""
+    scripts, and its text loads separately); anything else as a PDF or court web page. The number in a page address
+    /opinion/<n>/ is the CASE (CourtListener's "cluster"), not the opinion document: read as an opinion id it gives an
+    unrelated order or a 404, so the case is looked up first and its opinion documents read."""
     m = re.search(r"courtlistener\.com/opinion/(\d+)/", url or "")
     if not m:
         return pdf_text(url)
-    j = fu.Api().get(f"{fu.CL}/api/rest/v4/opinions/{m[1]}/?fields=plain_text,html_with_citations,html,download_url",
-                     {"Authorization": "Token " + (fu.user_env("COURTLISTENER_TOKEN") or "")}, cl=True)
-    text = j.get("plain_text") or fu.strip_tags(j.get("html_with_citations") or j.get("html") or "")
-    return text if len(text.split()) >= 60 or not j.get("download_url") else pdf_text(j["download_url"])
+    api, auth = fu.Api(), {"Authorization": "Token " + (fu.user_env("COURTLISTENER_TOKEN") or "")}
+    cluster = api.get(f"{fu.CL}/api/rest/v4/clusters/{m[1]}/?fields=sub_opinions", auth, cl=True)
+    text = ""
+    for o in cluster.get("sub_opinions") or []:  # the lead opinion first; a concurrence or dissent only if it has none
+        j = api.get(o.rstrip("/") + "/?fields=plain_text,html_with_citations,html,download_url", auth, cl=True)
+        text = j.get("plain_text") or fu.strip_tags(j.get("html_with_citations") or j.get("html") or "")
+        if len(text.split()) < 60 and j.get("download_url"):
+            text = pdf_text(j["download_url"])
+        if len(text.split()) >= 60:
+            break
+    return text
+
+
+def same_case(text, case):
+    """False when neither party's name is in the text: the copy fetched is some other case's order."""
+    words = lambda s: [w for w in re.findall(r"[a-z]{4,}", s.lower()) if w not in NOT_NAMES][:1]  # noqa: E731
+    names = [w for side in fu.split_parties(case) for w in words(side)]
+    low = (text or "").lower()
+    return not names or any(n in low for n in names)
+
+
+NOT_NAMES = {"inc", "llc", "corp", "company", "the", "health", "medical", "services", "insurance", "group", "plan",
+             "life", "care", "healthcare", "center", "associates", "professional", "physicians", "blue", "cross",
+             "shield", "united", "national", "american", "foundation"}
 
 
 def write_summaries(report, limit=MAX_SUMMARIES, newest=SUMMARY_NEWEST):
@@ -199,6 +222,10 @@ def write_summaries(report, limit=MAX_SUMMARIES, newest=SUMMARY_NEWEST):
                 say(f"    stopped: {e}. The rest are written next run.")
                 break
             say(f"    skipped: {e} (this ruling's copy could not be fetched)")  # e.g. a 404: only this one
+            done["no readable copy"] += 1
+            continue
+        if not same_case(text, d["case"]):  # the wrong order: never summarise it as this case
+            say("    skipped: the copy fetched is a different case's order")
             done["no readable copy"] += 1
             continue
         try:
@@ -277,10 +304,13 @@ def ruling_candidates(api, token, gi_key, since, known, state=None):
     return list(out.values())
 
 
-def docket_updates(api, token, since, report, state, found):
+def docket_updates(api, token, since, report, state, found, history=None):
     """Court entries since `since` on every case being followed: the report's pending and decided cases, and the
     dockets found earlier. Returns ruling candidates; settlements and voluntary dismissals go straight into
-    found["ended"]. A later ruling in a case the report has already decided is marked "decided" (a person decides it)."""
+    found["ended"]. A later ruling in a case the report has already decided is marked "decided" (a person decides it).
+    `history` (docket id -> To check row): open To check cases searched once over their WHOLE docket, so a case that
+    ended or was decided before the look-back still settles its row (state["historyChecked"] records which were)."""
+    history = history or {}
     follow = {}  # docket id -> case details
     ids = state.setdefault("docketIds", {})
     cases = list(report["pending"].values()) + list(report["decisions"].values())
@@ -295,13 +325,18 @@ def docket_updates(api, token, since, report, state, found):
     for did, p in state.get("dockets", {}).items():
         if p.get("enforcement") is not False and did not in follow and provider_v_payer(p["case"]):  # confirmed or not told
             follow[did] = {k: p[k] for k in ("case", "court", "level", "circuit", "state", "docket", "payer")}
+    for did, i in history.items():
+        follow.setdefault(did, {k: i.get(k) for k in ("case", "court", "level", "circuit", "state", "docket", "payer")})
     decided_on = [(set(data.norm_docket(d["docket"])), d["date"]) for d in report["decisions"].values()]
-    out, chunk = [], sorted(follow)
-    for i in range(0, len(chunk), cd.CHUNK):
-        part = chunk[i:i + cd.CHUNK]
+    recent, whole = sorted(d for d in follow if d not in history), sorted(history)
+    batches = ([(recent[i:i + cd.CHUNK], since) for i in range(0, len(recent), cd.CHUNK)] +
+               [(whole[i:i + cd.CHUNK], None) for i in range(0, len(whole), cd.CHUNK)])
+    out = []
+    for part, start in batches:
+        when = f" AND entry_date_filed:[{start.isoformat()} TO *]" if start else ""
         q = urllib.parse.urlencode({"type": "rd", "order_by": "entry_date_filed desc",
-                                    "q": f"docket_id:({' OR '.join(part)}) AND {cd.DECISIVE} AND entry_date_filed:[{since.isoformat()} TO *]"})
-        url = f"{fu.CL}/api/rest/v4/search/?{q}"
+                                    "q": f"docket_id:({' OR '.join(part)}) AND {cd.DECISIVE}{when}"})
+        url, answered = f"{fu.CL}/api/rest/v4/search/?{q}", True
         for _ in range(MAX_PAGES):
             if not url:
                 break
@@ -309,6 +344,7 @@ def docket_updates(api, token, since, report, state, found):
                 j = api.get(url, {"Authorization": "Token " + token}, cl=True)
             except OSError as e:  # no answer even after Api.get's retries: only this batch waits for the next run
                 say(f"  {len(part)} cases not checked today ({e}); they are checked on the next run")
+                answered = False
                 break
             for r in j.get("results", []):
                 p, desc = follow.get(str(r.get("docket_id"))), r.get("description") or r.get("short_description") or ""
@@ -330,7 +366,15 @@ def docket_updates(api, token, since, report, state, found):
                                 "fetch": [("pdf", "https://storage.courtlistener.com/" + pdf)] if pdf else [],
                                 "docketLabel": label, "docketText": desc[:400]})
             url = j.get("next")
+        if start is None and answered:  # whole docket searched: from now on the look-back is enough
+            state.setdefault("historyChecked", {}).update({d: dt.date.today().isoformat() for d in part})
     return out
+
+
+def history_to_check(store, state):
+    """The open To check cases (docket id -> row) whose whole docket has not been searched yet."""
+    done = state.get("historyChecked", {})
+    return {i["docketId"]: i for i in store.values() if i.get("docketId") and not i.get("answer") and i["docketId"] not in done}
 
 
 def _days(a, b):
@@ -773,10 +817,25 @@ def retry_missing_filings(store, state, today=None):
     return n
 
 
+def lead_case_rulings(results):
+    """A line for the run's summary when a ruling both readers agreed on is in the New Jersey lead case."""
+    lead = set(data.norm_docket(nj_stay.LEAD_CASE["docket"]))
+    return [f"LEAD CASE RULING: {c['case'][:60]} ({c.get('date')}) was read as a {r['result']}. It governs the "
+            f"{len(nj_stay.DOCKETS)} New Jersey cases stayed by the Jan 16, 2026 order; tell the legal team."
+            for c, r, _ in results if r.get("agreed") and r.get("result") in ("Win", "Loss")
+            and lead & set(data.norm_docket(c.get("docket") or ""))]
+
+
+def on_nj_stay_list(i):
+    """A District of New Jersey case listed in the court's own stay order of its NSA enforcement suits (app/nj_stay.py)."""
+    return "new jersey" in (i.get("court") or "").lower() and bool(set(data.norm_docket(i.get("docket") or "")) & nj_stay.DOCKETS)
+
+
 def auto_settle(store, state, found):
     """Answer the open To check rows this run has settled by itself, so they leave the list (to_check.tidy): a ruling
-    both readers agreed on, a first filing both confirmed, a settlement or voluntary dismissal, or a case found not to
-    be an enforcement suit. Returns how many."""
+    both readers agreed on, a first filing both confirmed, a settlement or voluntary dismissal, a case found not to
+    be an enforcement suit, or a New Jersey case on the court's stay list (shown as pending, marked "From court
+    order"). The checks run in that order, so a ruling or an ending always wins over the stay. Returns how many."""
     n = 0
     decisions = [x for x in found.get("decisions", []) if not x.get("byHand")]
     on_dashboard = {p.get("docketId") for p in found.get("pending", []) if not p.get("byHand")}
@@ -801,6 +860,14 @@ def auto_settle(store, state, found):
         elif ended:
             to_check.settle(store, key, to_check.LEAVE, f"Settled by the daily update on {when}: the case ended without a "
                             f"ruling ({ended.get('status', '').split(': ')[-1]}, {ended.get('date')}).")
+        elif on_nj_stay_list(i):
+            to_check.settle(store, key, to_check.PENDING, f"Settled by the daily update on {when}: {nj_stay.STATUS}")
+            if did in state.get("dockets", {}):  # confirmed: never screened again (which would take it off the dashboard)
+                state["dockets"][did].update(screened=True, enforcement=True, layers=2, stayed=True)
+            found["pending"] = [p for p in found["pending"] if p.get("docketId") != did or p.get("byHand")]
+            found["pending"].append({k: i.get(k) for k in ("case", "court", "level", "circuit", "state", "docket", "url",
+                                                           "payer", "docketId")} |
+                                    {"filed": i.get("filed") or i.get("date"), "status": nj_stay.STATUS, "fromOrder": True})
         elif did in on_dashboard:
             to_check.settle(store, key, to_check.PENDING, f"Settled by the daily update on {when}: both readers read the "
                             "first filing and confirmed it is an enforcement suit.")
@@ -943,7 +1010,8 @@ def run(a, token, gi_key):
                   lambda: ruling_candidates(api, token, gi_key, since, known, state)),
                  ("Leads from Georgetown's Health Care Litigation Tracker", lambda: georgetown_leads(state, report, asks)),
                  ("New cases (CourtListener)", lambda: new_dockets(api, token, since, known, state)),
-                 ("Updates on every case already followed (CourtListener)", lambda: docket_updates(api, token, since - dt.timedelta(days=DOCKET_LOOKBACK_DAYS), report, state, found)),
+                 ("Updates on every case already followed (CourtListener)", lambda: docket_updates(api, token, since - dt.timedelta(days=DOCKET_LOOKBACK_DAYS), report, state, found,
+                                        history_to_check(store, state))),
                  ("Earlier entries of newly added cases (CourtListener)", lambda: catch_up(api, token, state, found)),
                  ("DOL and agency actions (Federal Register)", lambda: new_dol(api, since, dol_titles, found)),
                  ("Guidance on CMS's No Surprises pages", lambda: cms_guidance(state, dol_titles, found))]
@@ -987,6 +1055,7 @@ def run(a, token, gi_key):
         results = read_queue(api, token, queue, state, found, reader.system_prompt(report["decisions"].values()), a.max_reads, asks, save_progress)
         summary["Rulings put on the dashboard"] = sum(1 for c, r, _ in results if r["agreed"] and r.get("relevant")
                                                       and r.get("result") in ("Win", "Loss") and not c.get("decided"))
+        notes.extend(lead_case_rulings(results))
         summary["To check rows settled by this run"] = auto_settle(store, state, found)
     except BaseException:  # a crash, Ctrl+C, the window closed: keep what was done
         save_progress()

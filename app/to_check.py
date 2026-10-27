@@ -22,10 +22,11 @@ import data
 FOLDER, DONE, STORE, FILE = "To check", "Done", "to_check.json", "To check.xlsx"
 PENDING, WIN, LOSS, LEAVE = "Pending case", "Win", "Loss", "Leave out"
 ANSWERS = (PENDING, WIN, LOSS, LEAVE)
-COLUMNS = ["Case", "Court", "State", "Date", "What it is", "Why it needs a person", "What the readers found", "Link",
-           "Your answer", "Note (optional)", "Key", "Added on"]
+COLUMNS = ["Case", "Court", "Docket number", "State", "Date", "What it is", "Why it needs a person",
+           "What the readers found", "Link", "Your answer", "Note (optional)", "Key", "Added on"]
 SETTLED, SETTLED_COLUMNS = "Settled", ["Settled on", "Settled by"]
-WIDTHS = (46, 32, 7, 12, 22, 44, 50, 44, 16, 36, 4, 12)
+WIDTHS = (46, 32, 16, 7, 12, 22, 44, 50, 44, 16, 36, 4, 12)
+ANSWER_COL, KEY_COL = COLUMNS.index("Your answer") + 1, COLUMNS.index("Key") + 1  # 1-based, for openpyxl
 HEAD = PatternFill("solid", fgColor="1B2F6B")
 ANSWER = PatternFill("solid", fgColor="FFF7E6")
 READ_ME = [
@@ -33,8 +34,9 @@ READ_ME = [
     "already on the dashboard.",
     "What to do: for each row, open the link, then pick Your answer: Pending case (a suit to enforce an IDR award, not "
     "decided yet), Win or Loss (a ruling on enforcing the award), or Leave out (not one for the tracker). Add a note if "
-    "you like; for a Win or Loss it is shown as the holding. If the Case, Court, State or Date is wrong, correct it in "
-    "the row.",
+    "you like; for a Win or Loss it is shown as the holding. If the Case, Court, Docket number, State or Date is wrong, "
+    "correct it in the row. Before answering from a saved page (Justia, CourtListener), check its docket number "
+    "matches this row: one plaintiff often has several cases against the same insurer.",
     "Then: save the file here, under the same name, and close it. The next daily update puts the answers on the "
     "dashboard, marked 'Checked by a person', and moves the answered rows to the Settled sheet. Leave a row empty if "
     "you are not sure; it stays on the list. The daily update also settles rows by itself when it finds the answer (a "
@@ -100,8 +102,6 @@ def _write(f, new):
     if f.exists():
         wb = openpyxl.load_workbook(f)
         ws = wb["To check"]
-        if ws.cell(1, COLUMNS.index("Added on") + 1).value != "Added on":  # a file from before the column existed
-            ws.cell(1, COLUMNS.index("Added on") + 1, "Added on")
     else:
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -111,23 +111,31 @@ def _write(f, new):
             c.font, c.fill, c.alignment = Font(bold=True, color="FFFFFF"), HEAD, Alignment(wrap_text=True, vertical="top")
         for i, w in enumerate(WIDTHS, start=1):
             ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
-        ws.column_dimensions["K"].hidden = True  # the key, so answers can be matched even if rows are sorted
+        ws.column_dimensions[_letter(KEY_COL)].hidden = True  # the key, so answers can be matched even if rows are sorted
         ws.freeze_panes = "A2"
         dv = DataValidation(type="list", formula1='"' + ",".join(ANSWERS) + '"', allow_blank=True)
         ws.add_data_validation(dv)
-        dv.add("I2:I2000")
+        dv.add(f"{_letter(ANSWER_COL)}2:{_letter(ANSWER_COL)}2000")
         how = wb.create_sheet("Read me")
         how.column_dimensions["A"].width = 120
         for line in READ_ME:
             how.append([line])
             how.cell(how.max_row, 1).alignment = Alignment(wrap_text=True, vertical="top")
+    head = [c.value for c in ws[1]]  # written by the file's own headings, so an older layout still lines up
     for i in new:
-        ws.append([i["case"], i.get("court"), i.get("state"), i.get("date"), i["kind"], i["why"], i["readers"],
-                   i.get("url"), None, None, i["key"], i.get("asked")])
+        values = {"Case": i["case"], "Court": i.get("court"), "Docket number": i.get("docket"), "State": i.get("state"),
+                  "Date": i.get("date"), "What it is": i["kind"], "Why it needs a person": i["why"],
+                  "What the readers found": i["readers"], "Link": i.get("url"), "Key": i["key"], "Added on": i.get("asked")}
+        ws.append([values.get(h) for h in head])
         for c in ws[ws.max_row]:
             c.alignment = Alignment(wrap_text=True, vertical="top")
-        ws.cell(ws.max_row, 9).fill = ANSWER
+        if "Your answer" in head:
+            ws.cell(ws.max_row, head.index("Your answer") + 1).fill = ANSWER
     wb.save(f)
+
+
+def _letter(n):
+    return openpyxl.utils.get_column_letter(n)
 
 
 def collect(root, store, say=lambda m: None):
@@ -166,8 +174,8 @@ def _answers(rows, store):
             continue
         note = str(r[col["Note (optional)"]] or "").strip() if "Note (optional)" in col else ""
         # The person may have corrected what the readers made of the case.
-        fixes = {k: _cell(r[col[h]]) for h, k in (("Case", "case"), ("Court", "court"), ("State", "state"), ("Date", "date"))
-                 if h in col and _cell(r[col[h]])}
+        fixes = {k: _cell(r[col[h]]) for h, k in (("Case", "case"), ("Court", "court"), ("Docket number", "docket"),
+                                                  ("State", "state"), ("Date", "date")) if h in col and _cell(r[col[h]])}
         fixes = {k: (data.mask(v) if k == "case" else v.upper() if k == "state" else v) for k, v in fixes.items()}
         if store[key].get("answer") != ans or store[key].get("note", "") != data.mask(note) or any(store[key].get(k) != v for k, v in fixes.items()):
             store[key].update(answer=ans, note=data.mask(note), answered=dt.date.today().isoformat(), **fixes)
@@ -245,11 +253,11 @@ def _settled_sheet(wb):
         c.font, c.fill, c.alignment = Font(bold=True, color="FFFFFF"), HEAD, Alignment(wrap_text=True, vertical="top")
     for i, w in enumerate(WIDTHS + (12, 16), start=1):
         ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
-    ws.column_dimensions["K"].hidden = True
+    ws.column_dimensions[_letter(KEY_COL)].hidden = True
     ws.freeze_panes = "A2"
     dv = DataValidation(type="list", formula1='"' + ",".join(ANSWERS) + '"', allow_blank=True)
     ws.add_data_validation(dv)
-    dv.add("I2:I5000")
+    dv.add(f"{_letter(ANSWER_COL)}2:{_letter(ANSWER_COL)}5000")
     return ws
 
 

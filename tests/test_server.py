@@ -1,8 +1,6 @@
-"""The local server, idle shutdown, single instance and the desktop shortcut."""
+"""The local server, idle shutdown and single instance (no desktop shortcut: the app opens from Callagy Hub)."""
 import http.client
 import shutil
-import subprocess
-import sys
 import threading
 import time
 
@@ -135,26 +133,10 @@ def test_error_page_when_no_report(server):
     assert status == 500 and b"No report found" in body
 
 
-@pytest.mark.skipif(sys.platform != "win32", reason="Windows shortcut")
-def test_desktop_shortcut_created_once_and_repaired(tmp_path, monkeypatch):
-    monkeypatch.setattr(main, "APPDATA", tmp_path / "appdata")
-    desktop = tmp_path / "desktop"
-    desktop.mkdir()
-    exe = sys.executable
-    icon = main.STATIC / main.ICON_NAME
-    assert main.ensure_shortcut(exe, icon, desktop) == "created"
-    assert main.ensure_shortcut(exe, icon, desktop) == "ok"
-    (desktop / main.SHORTCUT_NAME).unlink()
-    assert main.ensure_shortcut(exe, icon, desktop) == "created"
-    target = subprocess.run(["powershell", "-NoProfile", "-Command",
-                             f"(New-Object -ComObject WScript.Shell).CreateShortcut('{desktop / main.SHORTCUT_NAME}').TargetPath"],
-                            capture_output=True, text=True).stdout.strip()
-    assert target.lower() == exe.lower()
-    assert (tmp_path / "appdata" / main.ICON_NAME).exists()
-
-
-def test_unc_leaves_unmapped_paths_alone():
-    assert main.unc(r"\\server\share\x.exe") == r"\\server\share\x.exe"
+def test_starting_makes_no_desktop_shortcut():
+    # Opened from Callagy Hub only (2026-10-27): no shortcut code, and nothing slow before the server starts.
+    import inspect
+    assert not hasattr(main, "ensure_shortcut") and "powershell" not in inspect.getsource(main).lower()
 
 
 def test_theme_from_logo_colours():

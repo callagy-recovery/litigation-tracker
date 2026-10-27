@@ -399,7 +399,8 @@ def merge_auto(folder, decisions, pending, dol, notes):
                         "appellate": level.casefold() == "federal appellate", "circuit": circ, "state": st,
                         "filed": _date(x.get("filed")), "docket": _text(x.get("docket")), "status": m(x.get("status")),
                         "url": _safe_url(x.get("url")), "payer": m(x.get("payer")),
-                        "insurers": insurers.companies(m(x.get("payer"))), "auto": True, "byHand": bool(x.get("byHand"))})
+                        "insurers": insurers.companies(m(x.get("payer"))), "auto": True, "byHand": bool(x.get("byHand")),
+                        "fromOrder": bool(x.get("fromOrder"))})  # listed in a court's own order (app/nj_stay.py), not read by AI
         count["pending"] += 1
     if dol is not None:
         titles = {re.sub(r"[^a-z0-9]", "", a["title"].lower()) for a in dol}

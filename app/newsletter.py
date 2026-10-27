@@ -155,7 +155,7 @@ def build(rulings, pending, report_name, today, since=None, theme=None, logo=Tru
         + f"<tr><td style='padding:24px 30px'><table role='presentation' width='100%' cellpadding='0' cellspacing='0' "
         f"style='background:{t['tint']};border-left:4px solid {t['brand']}'><tr><td style='padding:14px 16px;{FONT};font-size:14px;color:{INK}'>"
         f"<b style='color:{t['brandDark']}'>See the full details on the dashboard.</b><br>"
-        f"Open <b>Litigation Tracker</b> from your desktop shortcut for the map, each ruling's summary and its court order.</td></tr></table></td></tr>"
+        f"Open <b>Litigation Tracker</b> from Callagy Hub for the map, each ruling's summary and its court order.</td></tr></table></td></tr>"
         # footer
         f"<tr><td style='padding:14px 30px 20px;border-top:1px solid {LINE};{FONT};font-size:11px;line-height:16px;color:{MUTED}'>"
         "Callagy Law · internal litigation research. Rulings come from court records and the reviewed report; "

@@ -1,8 +1,8 @@
-"""Litigation Tracker launcher: desktop shortcut, single instance, local web server, idle shutdown.
+"""Litigation Tracker launcher: single instance, local web server, idle shutdown. It is opened from Callagy Hub only, so
+it makes no desktop shortcut (removed 2026-10-27; that step also cost about 2 s at every start).
 
 Run as "Litigation Tracker.exe" (PyInstaller) or, from source, `.venv\\Scripts\\python app\\main.py`.
 """
-import ctypes
 import datetime as dt
 import getpass
 import html
@@ -11,7 +11,6 @@ import json
 import logging
 import mimetypes
 import os
-import subprocess
 import sys
 import threading
 import time
@@ -37,8 +36,6 @@ APPDATA = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "Litigation Tracke
 INSTANCE = APPDATA / "instance.json"
 IDLE_SECONDS = 60 * 60
 PING = b"litigation-tracker"
-SHORTCUT_NAME = "Litigation Tracker.lnk"
-ICON_NAME = "litigation_tracker.ico"
 DEFAULT_THEME = {"brand": "#2447a8", "brandDark": "#1b2f6b", "accent": "#3b3b3b", "tint": "#eef2fc"}
 
 log = logging.getLogger("lt")
@@ -64,55 +61,6 @@ def setup_logging():
     handler.setFormatter(_MaskingFormatter("%(asctime)s %(levelname)s %(message)s"))
     log.addHandler(handler)
     log.setLevel(logging.INFO)
-
-
-# ---------- desktop shortcut ----------
-
-def unc(path):
-    """H:\\x -> \\\\server\\share\\x, so the shortcut works for users who map the share to another letter."""
-    s = str(path)
-    if len(s) > 1 and s[1] == ":":
-        buf, n = ctypes.create_unicode_buffer(1024), ctypes.c_ulong(1024)
-        if ctypes.windll.mpr.WNetGetConnectionW(s[:2], buf, ctypes.byref(n)) == 0:
-            return buf.value + s[2:]
-    return s
-
-
-_SHORTCUT_PS = r"""
-$ErrorActionPreference = 'Stop'
-$desktop = if ($env:LT_DESKTOP) { $env:LT_DESKTOP } else { [Environment]::GetFolderPath('Desktop') }
-$path = Join-Path $desktop $env:LT_NAME
-$shell = New-Object -ComObject WScript.Shell
-if (Test-Path -LiteralPath $path) {
-    $cur = $shell.CreateShortcut($path)
-    if ($cur.TargetPath -eq $env:LT_EXE -and $cur.IconLocation -eq "$($env:LT_ICON),0") { 'ok'; exit }
-}
-$link = $shell.CreateShortcut($path)
-$link.TargetPath = $env:LT_EXE
-$link.WorkingDirectory = $env:USERPROFILE
-$link.IconLocation = "$($env:LT_ICON),0"
-$link.Description = 'Open the Litigation Tracker dashboard'
-$link.Save()
-'created'
-"""
-
-
-def ensure_shortcut(exe, icon_source, desktop=None):
-    """Adds this user's desktop shortcut, or repairs it if it is missing, moved or has lost its icon.
-    The icon is copied to %LOCALAPPDATA% because Windows does not show shortcut icons that sit on a network drive."""
-    APPDATA.mkdir(parents=True, exist_ok=True)
-    icon = APPDATA / ICON_NAME
-    if icon_source.exists() and (not icon.exists() or icon_source.stat().st_mtime > icon.stat().st_mtime):
-        icon.write_bytes(icon_source.read_bytes())
-    env = dict(os.environ, LT_EXE=str(exe), LT_ICON=str(icon), LT_NAME=SHORTCUT_NAME)
-    if desktop:
-        env["LT_DESKTOP"] = str(desktop)
-    out = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", _SHORTCUT_PS],
-                         env=env, capture_output=True, text=True, timeout=60,
-                         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-    if out.returncode != 0:
-        raise RuntimeError(out.stderr.strip() or "PowerShell failed")
-    return out.stdout.strip()
 
 
 # ---------- theme from the logo ----------
@@ -491,12 +439,6 @@ def main():
     if os.environ.get("LT_CODE_PROBLEM"):
         log.warning("Running the launcher's backup code: %s", os.environ["LT_CODE_PROBLEM"])
     open_browser = os.environ.get("LT_NO_BROWSER") != "1"
-    if FROZEN:
-        try:
-            result = ensure_shortcut(unc(Path(sys.executable)), STATIC / ICON_NAME)
-            log.info("Desktop shortcut: %s", result)
-        except Exception as e:
-            log.warning("Desktop shortcut could not be set up: %s", e)
     port = running_port()
     if port:
         log.info("Already running on port %d; opening the browser there", port)

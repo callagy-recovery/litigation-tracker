@@ -414,5 +414,21 @@
   "source": "https://storage.courtlistener.com/recap/gov.uscourts.njd.563930/gov.uscourts.njd.563930.14.0.pdf",
   "written": "2026-10-27T09:24:18",
   "summary": "A New Jersey provider asked the court to confirm two No Surprises Act arbitration awards against an Illinois insurer. The court dismissed the complaint without prejudice for lack of personal jurisdiction, finding the insurer's New Jersey contacts came only from a patient's choice of care. It denied the cross-motion to confirm and declined to decide the merits or transfer."
+ },
+ "6046062026|2026-08-25": {
+  "outcome": "Loss",
+  "case": "AA Med., P.C. v. Aetna Life Insurance Co.",
+  "date": "2026-08-25",
+  "source": "https://www.courtlistener.com/opinion/10986684/aa-med-pc-v-aetna-life-ins-co/",
+  "written": "2026-10-27T13:49:54",
+  "summary": "A medical provider sued Aetna on state-law contract and quasi-contract theories to recover amounts awarded in No Surprises Act IDR proceedings. The court dismissed the complaint. It agreed the Act creates no private right of action and held that agency enforcement is the remedy the parties opted into. It also found no contract between the parties."
+ },
+ "2026000417|2026-08-24": {
+  "outcome": "Win",
+  "case": "Intraoperative Neurology Servs., PC v. Excellus Bluecross Blueshield",
+  "date": "2026-08-24",
+  "source": "https://www.courtlistener.com/opinion/10986690/intraoperative-neurology-servs-pc-v-excellus-bluecross-blueshield/",
+  "written": "2026-10-27T13:50:19",
+  "summary": "A provider sought to enforce IDR awards of $206,723.80 that the insurer had not paid. The court denied the insurer's motion to dismiss. It held the No Surprises Act creates no standalone private right of action, but does not bar state-law claims to enforce awards, because enforcement is not \"judicial review.\" Contract and quasi-contract claims were adequately pled."
  }
 }

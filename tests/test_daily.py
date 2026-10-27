@@ -3,6 +3,7 @@ what it found with the report."""
 import datetime as dt
 import json
 import os
+import urllib.parse
 
 import pytest
 
@@ -181,23 +182,23 @@ def test_answers_on_the_to_check_list_reach_the_dashboard(tmp_path):
 
     wb = openpyxl.load_workbook(f)
     ws = wb["To check"]
-    ws["I2"], ws["I3"], ws["J3"] = "Pending case", "win", "Petition to confirm granted."
+    ws["J2"], ws["J3"], ws["K3"] = "Pending case", "win", "Petition to confirm granted."
     wb.save(f)
     assert sorted(tc.collect(tmp_path, store)) == ["docket:11", "rd:22"]
     assert tc.tidy(tmp_path, store) == 2  # answered rows leave the To check sheet for the Settled sheet
     wb = openpyxl.load_workbook(f)
     assert [r[0].value for r in wb["To check"].iter_rows(min_row=2)] == ["Gamma v. Anthem"]
-    assert [(r[0].value, r[8].value, r[13].value) for r in wb["Settled"].iter_rows(min_row=2)] == [
+    assert [(r[0].value, r[9].value, r[14].value) for r in wb["Settled"].iter_rows(min_row=2)] == [
         ("Alpha Med v. Aetna", "Pending case", "a person"), ("Beta ER v. Cigna", "Win", "a person")]
     assert tc.open_count(store) == 1
     # A later run adds its rows at the bottom of the same file, with the day they were found.
     later = tc.item("docket:44", "New case", "No free copy of the first filing.", {**CASE, "case": "Delta v. Cigna", "docketId": "44"})
     assert tc.add(tmp_path, store, [later], dt.date(2026, 10, 23)) == (f, 1)
     wb = openpyxl.load_workbook(f)
-    assert [(r[0].value, r[11].value) for r in wb["To check"].iter_rows(min_row=2)] == [
-        ("Gamma v. Anthem", "2026-10-20"), ("Delta v. Cigna", "2026-10-23")]
+    assert [(r[0].value, r[2].value, r[12].value) for r in wb["To check"].iter_rows(min_row=2)] == [
+        ("Gamma v. Anthem", "2:26-cv-00003", "2026-10-20"), ("Delta v. Cigna", CASE["docket"], "2026-10-23")]
     ws = wb["To check"]
-    ws["I2"], ws["I3"] = "Leave out", "Leave out"
+    ws["J2"], ws["J3"] = "Leave out", "Leave out"
     wb.save(f)
     tc.collect(tmp_path, store)
     tc.tidy(tmp_path, store)
@@ -298,13 +299,35 @@ def test_a_missing_ruling_copy_skips_only_that_ruling(tmp_path, monkeypatch):
     def text(url):
         if url in errors:
             raise RuntimeError(errors[url])
-        return "order text"
+        return "Clinic v. Plan: order text"
     monkeypatch.setattr(du, "ruling_text", text)
     monkeypatch.setattr(reader, "summarise", lambda *a: {"agreed": True, "summary": "Dismissed."})
     assert du.write_summaries(report) == {"written": 2, "could not agree": 0, "no readable copy": 1}
     errors[pdf.format(1)] = errors[pdf.format(2)] = "HTTP 429 from www.courtlistener.com"
     (tmp_path / data.SUMMARY_FILE).unlink()
     assert du.write_summaries(report) == {"written": 0, "could not agree": 0, "no readable copy": 1}  # 429: stop for today
+
+
+def test_a_courtlistener_page_number_is_the_case_not_the_document(monkeypatch):
+    # The REACH Air (11th Cir.) page is /opinion/10738691/; opinion document 10738691 is an unrelated Maine order.
+    import daily_update as du
+    import find_updates as fu
+    asked = []
+
+    def get(self, url, headers=None, body=None, cl=False):
+        asked.append(url.split("?")[0])
+        if "/clusters/" in url:
+            return {"sub_opinions": ["https://www.courtlistener.com/api/rest/v4/opinions/11205276/"]}
+        return {"plain_text": "REACH Air Medical Services v. Kaiser Foundation Health Plan. " + "affirmed " * 80}
+    monkeypatch.setattr(fu.Api, "get", get)
+    text = du.ruling_text("https://www.courtlistener.com/opinion/10738691/reach-air-medical-services-llc-v-kaiser/")
+    assert asked == ["https://www.courtlistener.com/api/rest/v4/clusters/10738691/",
+                     "https://www.courtlistener.com/api/rest/v4/opinions/11205276/"] and text.startswith("REACH Air")
+    case = "REACH Air Medical Services LLC v. Kaiser Foundation Health Plan Inc."
+    assert du.same_case(text, case)
+    assert not du.same_case("UNITED STATES DISTRICT COURT DISTRICT OF MAINE STEPHEN J. RATCLIFFE v. BRP U.S., INC.", case)
+    assert du.same_case("Petition granted.", "AA Med., P.C. v. Aetna Life Insurance Co.") is False  # Aetna not named
+    assert du.same_case("anything", "Med. v. Inc.")  # no name to check: not held back
 
 
 def test_only_links_the_update_can_read_are_used_for_summaries():
@@ -438,7 +461,7 @@ def test_state_cases_saved_by_hand_are_read_and_shown(tmp_path, monkeypatch):
     wb = openpyxl.load_workbook(f)
     ws = wb["To check"]
     row = next(r for r in range(2, ws.max_row + 1) if ws.cell(r, 1).value == "Delta v. Humana")
-    ws.cell(row, 2).value, ws.cell(row, 4).value, ws.cell(row, 9).value = "District Court, Harris County", "2026-10-05", "Win"
+    ws.cell(row, 2).value, ws.cell(row, 5).value, ws.cell(row, 10).value = "District Court, Harris County", "2026-10-05", "Win"
     wb.save(f)
     tc.collect(tmp_path, store)
     win = tc.dashboard_rows(store)[0]["decisions"][0]
@@ -519,7 +542,7 @@ def test_the_whole_daily_run_hangs_together(tmp_path, monkeypatch):
     tc.save(tmp_path, store)
     import openpyxl
     wb = openpyxl.load_workbook(f)
-    wb["To check"]["I2"] = "Loss"
+    wb["To check"]["J2"] = "Loss"
     wb.save(f)
 
     assert du.main([]) == 0
@@ -645,11 +668,11 @@ def test_rows_the_daily_update_settles_itself_leave_the_list(tmp_path):
     assert tc.tidy(tmp_path, store) == 4
     wb = openpyxl.load_workbook(f)
     assert [r[0].value for r in wb["To check"].iter_rows(min_row=2)] == ["Still Open v. Aetna"]
-    assert {r[13].value for r in wb["Settled"].iter_rows(min_row=2)} == {"the daily update"}
+    assert {r[14].value for r in wb["Settled"].iter_rows(min_row=2)} == {"the daily update"}
     # A person disagrees on the Settled sheet: their answer wins from then on.
     ws = wb["Settled"]
     r = next(r for r in range(2, ws.max_row + 1) if ws.cell(r, 1).value == "Bhagavan v. Nutex Health Inc.")
-    ws.cell(r, 9).value = "Pending case"
+    ws.cell(r, 10).value = "Pending case"
     wb.save(f)
     assert tc.collect(tmp_path, store) == ["docket:2"] and "auto" not in store["docket:2"]
     assert [p["case"] for p in tc.dashboard_rows(store)[0]["pending"]] == ["Bhagavan v. Nutex Health Inc."]
@@ -680,6 +703,79 @@ def test_bare_opinions_are_read_and_filings_to_read_go_first(monkeypatch):
     state["dockets"]["9"] = {**base, "case": "New Clinic v. Aetna", "docketId": "9", "doc": "x.pdf"}
     du.screen_dockets(state, {"pending": []}, 1, [])  # a limit of one: the case with a filing to read is not crowded out
     assert reads == ["New Clinic v. Aetna"] and all(d["screened"] for d in state["dockets"].values())
+
+
+def test_an_open_to_check_case_gets_its_whole_docket_searched_once(monkeypatch):
+    # Atlas v. HealthComp: on the To check list, but its stipulation of dismissal (Apr 2026) was before the look-back.
+    import daily_update as du
+    import to_check as tc
+    queries = []
+
+    class Api:
+        def get(self, url, headers=None, body=None, cl=False):
+            q = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)["q"][0]
+            queries.append(q)
+            hit = "70354791" in q and "entry_date_filed" not in q
+            return {"results": [{"docket_id": 70354791, "description": "Stipulation of Dismissal",
+                                 "entry_date_filed": "2026-04-01", "id": 5}] if hit else []}
+    monkeypatch.setattr(du.cd, "resolve_ids", lambda *a: None)
+    atlas = {**CASE, "case": "Atlas Neurophysiological Assessment, LLC v. HealthComp, LLC", "docket": "2:25-cv-02665",
+             "state": "PA", "docketId": "70354791"}
+    store = {"docket:70354791": tc.item("docket:70354791", "New case", "No free copy of the first filing.", atlas)}
+    state = {"dockets": {"11": {**CASE, "case": "Clinic v. Aetna", "docketId": "11"}}}
+    found = {"ended": [], "decisions": [], "pending": []}
+    report = {"pending": {}, "decisions": {}}
+    assert cd_entry_is_an_ending("Stipulation of Dismissal")
+    du.docket_updates(Api(), "t", dt.date(2026, 8, 28), report, state, found, du.history_to_check(store, state))
+    assert len(queries) == 2 and "docket_id:(11)" in queries[0] and "entry_date_filed:[2026-08-28" in queries[0]
+    assert "docket_id:(70354791)" in queries[1] and "entry_date_filed" not in queries[1]  # the whole docket
+    assert [(e["case"][:5], e["date"]) for e in found["ended"]] == [("Atlas", "2026-04-01")]
+    assert du.history_to_check(store, state) == {}  # searched once: not again
+    assert du.auto_settle(store, state, found) == 1 and store["docket:70354791"]["answer"] == tc.LEAVE
+
+
+def test_new_jersey_cases_on_the_courts_stay_list_become_pending_cases(tmp_path):
+    import daily_update as du
+    import nj_stay
+    import to_check as tc
+    nj = lambda n, docket, **kw: tc.item(f"docket:{n}", "New case", "No free copy of the first filing.",  # noqa: E731
+                                        {**CASE, "case": f"Clinic {n} v. Aetna", "docket": docket, "docketId": str(n),
+                                         "filed": "2025-08-28", **kw})
+    store = {i["key"]: i for i in (nj(1, "2:25-cv-14988"),                      # on Schedule A
+                                   nj(2, "2:25-cv-17642"),                      # not on it (Ahuja's number)
+                                   nj(3, "2:25-cv-15052"),                      # on it, but a ruling was read
+                                   nj(4, "2:25-cv-15377"),                      # on it, but it ended
+                                   nj(5, "2:25-cv-14988", court="District Court, S.D. New York", state="NY"))}  # same number, other court
+    state = {"dockets": {str(n): {"case": f"Clinic {n} v. Aetna", "screened": True, "layers": 2, "enforcement": None}
+                         for n in range(1, 6)}}
+    found = {"decisions": [{**CASE, "docket": "2:25-cv-15052", "result": "Loss", "date": "2026-11-02", "holding": "Dismissed."}],
+             "ended": [{**CASE, "docket": "2:25-cv-15377", "status": "Ended: voluntary dismissal or settlement", "date": "2026-02-01"}],
+             "pending": []}
+    assert du.auto_settle(store, state, found) == 3
+    assert {k: i.get("answer") for k, i in store.items()} == {"docket:1": tc.PENDING, "docket:2": None, "docket:3": "Loss",
+                                                               "docket:4": tc.LEAVE, "docket:5": None}
+    assert "stay order of Jan 16, 2026" in store["docket:1"]["note"] and store["docket:1"]["auto"]
+    assert [(p["docketId"], p["fromOrder"], p["status"]) for p in found["pending"]] == [("1", True, nj_stay.STATUS)]
+    assert state["dockets"]["1"]["enforcement"] is True and du.waiting_dockets(state) == []  # never screened again
+    assert du.retry_missing_filings(store, state) == 2 and "retried" not in state["dockets"]["1"]  # only the open rows 2 and 5
+    (tmp_path / data.AUTO_FILE).write_text(json.dumps(found), encoding="utf-8")
+    decisions, pending = [], []
+    data.merge_auto(tmp_path, decisions, pending, None, [])
+    assert [(p["case"], p["fromOrder"], p["byHand"]) for p in pending] == [("Clinic 1 v. Aetna", True, False)]
+
+
+def test_a_ruling_in_the_new_jersey_lead_case_is_called_out():
+    import daily_update as du
+    lead = {**CASE, "case": "East Coast Plastic Surgery PLLC PA v. Aetna", "docket": "2:25-cv-15052", "date": "2026-11-02"}
+    other = {**CASE, "docket": "2:25-cv-15053", "date": "2026-11-02"}
+    notes = du.lead_case_rulings([(lead, {"agreed": True, "result": "Loss"}, ""), (other, {"agreed": True, "result": "Loss"}, ""),
+                                  (lead, {"agreed": False, "result": None}, "")])
+    assert len(notes) == 1 and notes[0].startswith("LEAD CASE RULING: East Coast") and "329 New Jersey cases" in notes[0]
+
+
+def cd_entry_is_an_ending(text):
+    import check_dockets as cd
+    return cd.entry_label(text) == "Ended: voluntary dismissal or settlement"
 
 
 def test_new_guidance_on_cms_pages_goes_into_the_dol_actions():
@@ -769,7 +865,7 @@ def test_a_to_check_file_open_in_excel_does_not_lose_rows(tmp_path, monkeypatch)
         assert tc.add(tmp_path, store, [], today) == (None, 0)  # still open on the next try
     f, n = tc.add(tmp_path, store, [], dt.date(2026, 10, 21))  # closed: the held-back row goes in at the bottom
     assert (f.name, n, tc.unwritten(store)) == (tc.FILE, 1, 0)
-    assert [r[10] for r in openpyxl.load_workbook(f)["To check"].iter_rows(min_row=2, values_only=True)] == ["docket:1", "docket:2"]
+    assert [r[11] for r in openpyxl.load_workbook(f)["To check"].iter_rows(min_row=2, values_only=True)] == ["docket:1", "docket:2"]
 
 
 def test_a_file_held_for_a_moment_is_still_saved(tmp_path, monkeypatch):
