@@ -96,7 +96,7 @@
     const run = D.report.autoRun && new Date(D.report.autoRun);
     const updated = run && !isNaN(run) && D.report.autoRun.slice(0, 10) >= D.report.date;
     const time = updated ? run.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
-    document.getElementById('asof').append(
+    document.getElementById('asof').append(...[  // append() would print a null as the word "null": leave them out
       el('span', { class: 'asof-label', text: 'Data as of' }), ' ',
       el('strong', { text: fmtDate(updated ? D.report.autoRun.slice(0, 10) : D.report.date) }),
       updated ? el('span', { class: 'asof-label', text: `, ${time}` }) : null,
@@ -104,7 +104,7 @@
       updated ? el('br') : null,
       updated ? el('span', { class: 'asof-file', text: `Report of ${fmtDate(D.report.date)} plus the daily update` }) : null,
       D.dataDownload ? el('br') : null,
-      D.dataDownload ? el('a', { class: 'asof-download', href: D.dataDownload, download: '', text: 'Download the data (Excel)' }) : null);
+      D.dataDownload ? el('a', { class: 'asof-download', href: D.dataDownload, download: '', text: 'Download the data (Excel)' }) : null].filter(Boolean));
   }
 
   // ---------- summary strip ----------

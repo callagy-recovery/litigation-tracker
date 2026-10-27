@@ -305,7 +305,11 @@ def docket_updates(api, token, since, report, state, found):
         for _ in range(MAX_PAGES):
             if not url:
                 break
-            j = api.get(url, {"Authorization": "Token " + token}, cl=True)
+            try:
+                j = api.get(url, {"Authorization": "Token " + token}, cl=True)
+            except OSError as e:  # no answer even after Api.get's retries: only this batch waits for the next run
+                say(f"  {len(part)} cases not checked today ({e}); they are checked on the next run")
+                break
             for r in j.get("results", []):
                 p, desc = follow.get(str(r.get("docket_id"))), r.get("description") or r.get("short_description") or ""
                 label = cd.entry_label(desc)
@@ -346,15 +350,12 @@ def search_all(api, token, q, pages=6):
     for _ in range(pages):
         if not url:
             break
-        j = {}
-        for _attempt in range(3):
-            try:
-                j = api.get(url, {"Authorization": "Token " + token}, cl=True)
-                break
-            except (TimeoutError, OSError):
-                continue
-            except RuntimeError as e:  # Api.get has already waited and retried on HTTP 429
-                raise RateLimited(str(e)) from None
+        try:
+            j = api.get(url, {"Authorization": "Token " + token}, cl=True)
+        except OSError:  # no answer even after Api.get's retries: what was found so far is kept
+            j = {}
+        except RuntimeError as e:  # Api.get has already waited and retried on HTTP 429
+            raise RateLimited(str(e)) from None
         out += j.get("results", [])
         url = j.get("next")
     return out

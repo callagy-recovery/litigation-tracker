@@ -136,7 +136,15 @@ class Api:
                 if e.code == 429 and attempt < 2:
                     time.sleep(min(90, int(e.headers.get("Retry-After") or 60)))
                     continue
+                if e.code >= 500 and attempt < 2:  # the site's own trouble: usually gone in a minute
+                    time.sleep(20 * (attempt + 1))
+                    continue
                 raise RuntimeError(f"HTTP {e.code} from {urllib.parse.urlsplit(url).netloc}") from None
+            except OSError:  # a timeout or a dropped connection (HTTPError, also an OSError, is handled above)
+                if attempt < 2:
+                    time.sleep(20 * (attempt + 1))
+                    continue
+                raise  # the original error, which callers treat as "no answer" (not as the request limit)
         raise RuntimeError("rate limited")
 
 

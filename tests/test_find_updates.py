@@ -37,6 +37,26 @@ def test_matching_needs_the_same_court_area():
     assert fu.match(known, ["22cv6614"], "9", "CA") is None  # same number, different court
 
 
+def test_a_slow_reply_is_tried_again_before_giving_up(monkeypatch):
+    import io
+    import json
+    import pytest
+    replies = [TimeoutError("The read operation timed out"), io.BytesIO(json.dumps({"ok": 1}).encode())]
+
+    def urlopen(req, timeout):
+        r = replies.pop(0)
+        if isinstance(r, Exception):
+            raise r
+        return r
+    monkeypatch.setattr(fu.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(fu.time, "sleep", lambda s: None)
+    assert fu.Api().get("https://www.courtlistener.com/api/x") == {"ok": 1}  # one timeout, then an answer
+    replies[:] = [TimeoutError("The read operation timed out")] * 3
+    with pytest.raises(TimeoutError):  # never answers: the original error, which callers treat as "no answer"
+        fu.Api().get("https://www.courtlistener.com/api/x")
+    assert replies == []
+
+
 def test_party_split():
     assert fu.split_parties("PHI Health, LLC v. Anthem Insurance Companies, Inc. et al") == ("PHI Health, LLC", "Anthem Insurance Companies, Inc.")
 
