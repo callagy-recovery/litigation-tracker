@@ -664,7 +664,9 @@ def test_rows_the_daily_update_settles_itself_leave_the_list(tmp_path):
     assert got == {"docket:1": ("Loss", True), "docket:2": ("Leave out", True), "docket:3": ("Leave out", True),
                    "docket:4": ("Pending case", True)}
     assert "850 Securities" in store["docket:2"]["note"] and "voluntary dismissal or settlement" in store["docket:3"]["note"]
-    assert tc.dashboard_rows(store)[0] == {"decisions": [], "pending": []}  # the readers' own rows are already shown
+    rows = tc.dashboard_rows(store)[0]  # the update's own Win/Loss stays the readers' row; its Pending case is rebuilt
+    assert rows["decisions"] == [] and [(p["case"], p["byHand"], p["fromOrder"]) for p in rows["pending"]] == [
+        ("Elite Neuro v. Cigna", False, False)]
     assert tc.tidy(tmp_path, store) == 4
     wb = openpyxl.load_workbook(f)
     assert [r[0].value for r in wb["To check"].iter_rows(min_row=2)] == ["Still Open v. Aetna"]
@@ -675,7 +677,8 @@ def test_rows_the_daily_update_settles_itself_leave_the_list(tmp_path):
     ws.cell(r, 10).value = "Pending case"
     wb.save(f)
     assert tc.collect(tmp_path, store) == ["docket:2"] and "auto" not in store["docket:2"]
-    assert [p["case"] for p in tc.dashboard_rows(store)[0]["pending"]] == ["Bhagavan v. Nutex Health Inc."]
+    assert [(p["case"], p["byHand"]) for p in tc.dashboard_rows(store)[0]["pending"]] == [
+        ("Bhagavan v. Nutex Health Inc.", True), ("Elite Neuro v. Cigna", False)]
 
 
 def test_cases_with_no_free_first_filing_are_looked_up_again_weekly():
@@ -758,6 +761,13 @@ def test_new_jersey_cases_on_the_courts_stay_list_become_pending_cases(tmp_path)
     assert [(p["docketId"], p["fromOrder"], p["status"]) for p in found["pending"]] == [("1", True, nj_stay.STATUS)]
     assert state["dockets"]["1"]["enforcement"] is True and du.waiting_dockets(state) == []  # never screened again
     assert du.retry_missing_filings(store, state) == 2 and "retried" not in state["dockets"]["1"]  # only the open rows 2 and 5
+    # The next runs start by re-applying every answer: the stay-list case must stay on the dashboard, once, as it was
+    # (2026-10-27: it was taken off on the second run, because only a person's answers were put back).
+    for _ in range(2):
+        du.apply_answers(store, state, found)
+        assert [(p["docketId"], p["fromOrder"], p["byHand"], p["status"]) for p in found["pending"]] == [
+            ("1", True, False, nj_stay.STATUS)]
+    assert "byHand" not in state["dockets"]["1"]  # the update's own answer is not marked as a person's
     (tmp_path / data.AUTO_FILE).write_text(json.dumps(found), encoding="utf-8")
     decisions, pending = [], []
     data.merge_auto(tmp_path, decisions, pending, None, [])

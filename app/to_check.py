@@ -266,7 +266,10 @@ def _cell(v):
 
 
 def dashboard_rows(store):
-    """What the answered items add to found.json: ({"decisions": [...], "pending": [...]}, keys answered Leave out)."""
+    """What the answered items add to found.json: ({"decisions": [...], "pending": [...]}, keys answered Leave out).
+    Rebuilt on every run, so every Pending case answer is here: a person's ("Checked by a person") and one the daily
+    update gave itself (its own status; "fromOrder" for a case on a court's stay list). A Win or Loss the update
+    gave itself is not: the readers' own ruling row is already on the dashboard."""
     out, leave = {"decisions": [], "pending": []}, set()
     for key, i in store.items():
         a = i.get("answer")
@@ -275,13 +278,16 @@ def dashboard_rows(store):
         if a == LEAVE:
             leave.add(key)
             continue
-        if i.get("auto"):
-            continue  # settled by the daily update: the readers' own row is already on the dashboard
+        if i.get("auto") and a != PENDING:
+            continue
         row = {k: i.get(k) for k in ("case", "court", "level", "circuit", "state", "docket", "url", "payer")}
-        row.update(byHand=True, toCheck=key)
+        row.update(byHand=not i.get("auto"), toCheck=key)
         if a == PENDING:
             out["pending"].append({**row, "filed": i.get("filed") or i.get("date"), "docketId": i.get("docketId"),
-                                   "status": "Checked by a person: an enforcement suit with no ruling yet."})
+                                   "fromOrder": bool(i.get("fromOrder")),
+                                   "status": i.get("status") or ("Enforcement suit confirmed by both readers; no ruling yet."
+                                                                 if i.get("auto") else
+                                                                 "Checked by a person: an enforcement suit with no ruling yet.")})
         else:
             out["decisions"].append({**row, "date": i.get("date"), "result": a, "final": None,
                                      "holding": i.get("note") or f"A {a.lower()} for the provider, checked by a person."})

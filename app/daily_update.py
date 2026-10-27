@@ -788,9 +788,9 @@ def apply_answers(store, state, found):
     answered = {i["docketId"]: i["answer"] for i in store.values() if i.get("answer") and i.get("docketId")}
     for did, ans in answered.items():
         d = state.get("dockets", {}).get(did)
-        if d:
+        if d and not store.get(f"docket:{did}", {}).get("auto"):  # only a person's answer marks the docket as theirs
             d["byHand"], d["enforcement"] = ans, ans != to_check.LEAVE
-    # A person's answer replaces what the readers made of the same docket.
+    # The answer's own row (dashboard_rows, rebuilt every run) replaces what the readers made of the same docket.
     found["pending"] = [p for p in found["pending"] if p.get("docketId") not in answered]
     found["decisions"] += rows["decisions"]
     found["pending"] += rows["pending"]
@@ -862,12 +862,14 @@ def auto_settle(store, state, found):
                             f"ruling ({ended.get('status', '').split(': ')[-1]}, {ended.get('date')}).")
         elif on_nj_stay_list(i):
             to_check.settle(store, key, to_check.PENDING, f"Settled by the daily update on {when}: {nj_stay.STATUS}")
+            i.update(fromOrder=True, status=nj_stay.STATUS)  # kept, so every later run rebuilds the same dashboard row
             if did in state.get("dockets", {}):  # confirmed: never screened again (which would take it off the dashboard)
                 state["dockets"][did].update(screened=True, enforcement=True, layers=2, stayed=True)
             found["pending"] = [p for p in found["pending"] if p.get("docketId") != did or p.get("byHand")]
             found["pending"].append({k: i.get(k) for k in ("case", "court", "level", "circuit", "state", "docket", "url",
                                                            "payer", "docketId")} |
-                                    {"filed": i.get("filed") or i.get("date"), "status": nj_stay.STATUS, "fromOrder": True})
+                                    {"filed": i.get("filed") or i.get("date"), "status": nj_stay.STATUS, "fromOrder": True,
+                                     "toCheck": key})
         elif did in on_dashboard:
             to_check.settle(store, key, to_check.PENDING, f"Settled by the daily update on {when}: both readers read the "
                             "first filing and confirmed it is an enforcement suit.")
