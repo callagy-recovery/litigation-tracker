@@ -153,9 +153,9 @@ short summary; press Enter to close it. Open dashboards then show a *New data is
    rights, personal injury and similar).
 4. **Confirmed goes straight on the dashboard.** A ruling both readers agree on (Win or Loss) and a case both agree is
    an enforcement suit are shown, marked **Read automatically**. What both agree is not relevant is left out.
-5. **Not confirmed goes on that day's To check list.** Anything the readers could not agree on, could not read, or
-   where the ruling has no free copy, goes into `To check\To check YYYY-MM-DD.xlsx` for a person. So does a later
-   ruling in a case the report has already decided. If there is nothing to check, no file is made.
+5. **Not confirmed goes on the To check list.** Anything the readers could not agree on, could not read, or where the
+   ruling has no free copy, is added at the bottom of `To check\To check.xlsx` for a person, with the day it was found
+   in *Added on*. So is a later ruling in a case the report has already decided.
 6. **Updates the website** (https://callagy-recovery.github.io/litigation-tracker/, for staff without the H: drive). It
    rebuilds `docs\` (`app\publish.py`: patient initials masked, no Callagy case counts, no H:-only files, staff names
    in notes reworded) and pushes what changed, with any program change, to the public GitHub repository
@@ -171,19 +171,21 @@ twice. Data notes show when the update last ran, and warn if it has not run for 
 
 ## To check (answers from a person)
 
-Each `To check\To check YYYY-MM-DD.xlsx` has one row per case or ruling: the case, court, date, a link, why it needs a
-person, and what the readers found.
+One file, `To check\To check.xlsx`, has one row per case or ruling: the case, court, date, a link, why it needs a
+person, what the readers found, and *Added on* (the day the daily update found it). Each run adds its new rows at the
+bottom. (Until 2026-10-27 each day had its own file; those were merged into this one and are kept in `To check\Done\`.)
 
 1. Open the link and pick **Your answer**: *Pending case* (an enforcement suit, no ruling yet), *Win* or *Loss* (a ruling
    on enforcing the award), or *Leave out* (not one for the tracker). A note is optional; for a Win or Loss it is shown
    as the holding. Not sure? Leave it empty; it stays on the list.
-2. Save the file in the same folder, under the same name. It can be sent to the legal team and saved back.
+2. Save the file in the same folder, under the same name, and close it. It can be sent to the legal team and saved
+   back. If it is open in Excel during a run, that run's new rows are kept and added on the next run; the run's
+   summary says how many are waiting.
 3. The next daily update puts the answers on the dashboard, marked **Checked by a person**, and moves answered rows to
    the file's **Settled** sheet. It also settles rows by itself when it finds the answer: a ruling both readers agree
    on, a first filing both confirm, a settlement or voluntary dismissal, or a case that is not an enforcement suit. The
    reason is in the Note. Cases with no free first filing are looked up again once a week. To change any answer, change
-   it on the Settled sheet. *Leave out* takes the case
-   off and it is not asked again. A file with every row answered moves to `To check\Done\`, so the folder only holds
+   it on the Settled sheet. *Leave out* takes the case off and it is not asked again. The To check sheet only holds
    open work.
 
 The details of each row are kept in `auto\to_check.json`.
@@ -222,7 +224,7 @@ person finds the state cases; everything else is automatic. The printable guide
 
 For each file, both AI readers first pick out the case name, court, state, docket number and date, and whether it is
 a ruling or a new case. Then they read it like any other ruling or case. What they agree on goes on the State courts
-tab, marked "Read automatically"; anything else, including a file both readers think is not relevant (a person chose to save it, so a person decides), goes on that day's To check list, where the case details can be
+tab, marked "Read automatically"; anything else, including a file both readers think is not relevant (a person chose to save it, so a person decides), goes on the To check list, where the case details can be
 corrected before answering. Every file read moves to `State cases\Done\`, its name starting with the date it was read.
 Up to 30 files are read per run; the rest wait for the next run.
 
@@ -254,7 +256,7 @@ libraries and no CDN.
 | `app\resources.py` | Resources scan and title extraction |
 | `app\daily_update.py` | The daily update (built as `Daily Update\Litigation Tracker Daily Update.exe`) |
 | `app\reader.py` | Two-level Claude reader the daily update uses |
-| `app\to_check.py` | The dated To check lists and the answers from them |
+| `app\to_check.py` | The To check list (`To check\To check.xlsx`) and the answers from it |
 | `app\state_cases.py` | State cases saved by hand (`State cases\New\`) |
 | `app\newsletter.py`, `app\signups.py` | Newsletter draft and the sign-up list |
 | `app\tools\find_updates.py`, `app\tools\check_dockets.py` | Searches, report matching and docket-entry reading the daily update uses |

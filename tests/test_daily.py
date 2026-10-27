@@ -176,7 +176,7 @@ def test_answers_on_the_to_check_list_reach_the_dashboard(tmp_path):
              tc.item("docket:33", "New case", "No free copy of the first filing.", {**CASE, "case": "Gamma v. Anthem", "docketId": "33",
                                                                                     "docket": "2:26-cv-00003"})]
     f, n = tc.add(tmp_path, store, items, dt.date(2026, 10, 20))
-    assert n == 3 and f.name == "To check 2026-10-20.xlsx"
+    assert n == 3 and f.name == "To check.xlsx"
     assert tc.add(tmp_path, store, items, dt.date(2026, 10, 21)) == (None, 0)  # never asked twice
 
     wb = openpyxl.load_workbook(f)
@@ -187,20 +187,27 @@ def test_answers_on_the_to_check_list_reach_the_dashboard(tmp_path):
     assert tc.tidy(tmp_path, store) == 2  # answered rows leave the To check sheet for the Settled sheet
     wb = openpyxl.load_workbook(f)
     assert [r[0].value for r in wb["To check"].iter_rows(min_row=2)] == ["Gamma v. Anthem"]
-    assert [(r[0].value, r[8].value, r[12].value) for r in wb["Settled"].iter_rows(min_row=2)] == [
+    assert [(r[0].value, r[8].value, r[13].value) for r in wb["Settled"].iter_rows(min_row=2)] == [
         ("Alpha Med v. Aetna", "Pending case", "a person"), ("Beta ER v. Cigna", "Win", "a person")]
-    assert f.exists() and tc.open_count(store) == 1  # one row still open: the file stays
+    assert tc.open_count(store) == 1
+    # A later run adds its rows at the bottom of the same file, with the day they were found.
+    later = tc.item("docket:44", "New case", "No free copy of the first filing.", {**CASE, "case": "Delta v. Cigna", "docketId": "44"})
+    assert tc.add(tmp_path, store, [later], dt.date(2026, 10, 23)) == (f, 1)
+    wb = openpyxl.load_workbook(f)
+    assert [(r[0].value, r[11].value) for r in wb["To check"].iter_rows(min_row=2)] == [
+        ("Gamma v. Anthem", "2026-10-20"), ("Delta v. Cigna", "2026-10-23")]
     ws = wb["To check"]
-    ws["I2"] = "Leave out"
+    ws["I2"], ws["I3"] = "Leave out", "Leave out"
     wb.save(f)
     tc.collect(tmp_path, store)
     tc.tidy(tmp_path, store)
-    assert not f.exists() and (tmp_path / tc.FOLDER / tc.DONE / f.name).exists()
+    assert f.exists() and not (tmp_path / tc.FOLDER / tc.DONE).exists()  # every row settled: the one file stays
+    assert [r[0].value for r in openpyxl.load_workbook(f)["To check"].iter_rows(min_row=2)] == []
 
     state = {"dockets": {"11": {"enforcement": None}, "33": {"enforcement": True}}}
     found = {"decisions": [], "pending": [{**CASE, "case": "Gamma v. Anthem", "docketId": "33"}]}
-    assert du.apply_answers(store, state, found) == (2, 1)
-    assert du.apply_answers(store, state, found) == (2, 1)  # the same answers again: not added twice
+    assert du.apply_answers(store, state, found) == (2, 2)  # Gamma and Delta left out
+    assert du.apply_answers(store, state, found) == (2, 2)  # the same answers again: not added twice
     assert [p["case"] for p in found["pending"]] == ["Alpha Med v. Aetna"]  # Gamma left out, Alpha confirmed by hand
     assert found["decisions"][0]["result"] == "Win" and found["decisions"][0]["holding"] == "Petition to confirm granted."
     assert state["dockets"]["11"]["enforcement"] is True and state["dockets"]["33"]["enforcement"] is False
@@ -519,10 +526,9 @@ def test_the_whole_daily_run_hangs_together(tmp_path, monkeypatch):
     found = json.loads((tmp_path / "auto" / data.AUTO_FILE).read_text(encoding="utf-8"))
     assert sorted((d["case"], d["result"], bool(d.get("byHand"))) for d in found["decisions"]) == [
         ("Agreed v. Plan", "Win", False), ("Answered v. Plan", "Loss", True)]
-    today = tmp_path / tc.FOLDER / f"To check {dt.date.today().isoformat()}.xlsx"
-    rows = list(openpyxl.load_workbook(today)["To check"].iter_rows(min_row=2, values_only=True))
-    assert [r[0] for r in rows] == ["Disagreed v. Plan"]
-    assert (tmp_path / tc.FOLDER / tc.DONE / f.name).exists()  # the answered file was filed away
+    wb = openpyxl.load_workbook(tmp_path / tc.FOLDER / tc.FILE)
+    assert [r[0] for r in wb["To check"].iter_rows(min_row=2, values_only=True)] == ["Disagreed v. Plan"]  # today's row
+    assert [r[0] for r in wb["Settled"].iter_rows(min_row=2, values_only=True)] == ["Answered v. Plan"]  # same file
 
 
 def test_a_saved_file_the_readers_think_irrelevant_still_goes_to_a_person(monkeypatch):
@@ -639,7 +645,7 @@ def test_rows_the_daily_update_settles_itself_leave_the_list(tmp_path):
     assert tc.tidy(tmp_path, store) == 4
     wb = openpyxl.load_workbook(f)
     assert [r[0].value for r in wb["To check"].iter_rows(min_row=2)] == ["Still Open v. Aetna"]
-    assert {r[12].value for r in wb["Settled"].iter_rows(min_row=2)} == {"the daily update"}
+    assert {r[13].value for r in wb["Settled"].iter_rows(min_row=2)} == {"the daily update"}
     # A person disagrees on the Settled sheet: their answer wins from then on.
     ws = wb["Settled"]
     r = next(r for r in range(2, ws.max_row + 1) if ws.cell(r, 1).value == "Bhagavan v. Nutex Health Inc.")
@@ -747,7 +753,7 @@ def test_a_crash_part_way_keeps_what_was_done(tmp_path, monkeypatch):
         du.main([])
     found = json.loads((tmp_path / "auto" / data.AUTO_FILE).read_text(encoding="utf-8"))
     assert [p["docketId"] for p in found["pending"]] == ["7"]  # the finds were saved
-    assert "docket:8" in tc.load(tmp_path) and list((tmp_path / tc.FOLDER).glob("To check *.xlsx"))  # the row too
+    assert "docket:8" in tc.load(tmp_path) and (tmp_path / tc.FOLDER / tc.FILE).exists()  # the row too
     assert not (tmp_path / "auto" / "daily_update.lock").exists()  # and the lock released
 
 
@@ -756,19 +762,14 @@ def test_a_to_check_file_open_in_excel_does_not_lose_rows(tmp_path, monkeypatch)
     import to_check as tc
     store, today = {}, dt.date(2026, 10, 20)
     tc.add(tmp_path, store, [tc.item("docket:1", "New case", "why", {**CASE, "docketId": "1"})], today)
-    real_save = openpyxl.Workbook.save
-
-    def locked(self, filename):
-        if str(filename).endswith("To check 2026-10-20.xlsx"):
-            raise PermissionError("open in Excel")
-        return real_save(self, filename)
-    monkeypatch.setattr(openpyxl.Workbook, "save", locked)
-    f, n = tc.add(tmp_path, store, [tc.item("docket:2", "New case", "why", {**CASE, "docketId": "2"})], today)
-    assert f.name == "To check 2026-10-20 (2).xlsx" and n == 1 and store["docket:2"]["file"] == f.name
-    monkeypatch.setattr(openpyxl.Workbook, "save", lambda self, filename: (_ for _ in ()).throw(PermissionError("open")))
-    with pytest.raises(PermissionError):
-        tc.add(tmp_path, store, [tc.item("docket:3", "New case", "why", {**CASE, "docketId": "3"})], today)
-    assert "docket:3" not in store  # not recorded as asked, so it is asked again next run
+    with monkeypatch.context() as m:  # open in Excel: nothing can be saved into it
+        m.setattr(openpyxl.Workbook, "save", lambda self, filename: (_ for _ in ()).throw(PermissionError("open")))
+        assert tc.add(tmp_path, store, [tc.item("docket:2", "New case", "why", {**CASE, "docketId": "2"})], today) == (None, 0)
+        assert tc.unwritten(store) == 1 and tc.open_count(store) == 2  # kept, and counted as waiting
+        assert tc.add(tmp_path, store, [], today) == (None, 0)  # still open on the next try
+    f, n = tc.add(tmp_path, store, [], dt.date(2026, 10, 21))  # closed: the held-back row goes in at the bottom
+    assert (f.name, n, tc.unwritten(store)) == (tc.FILE, 1, 0)
+    assert [r[10] for r in openpyxl.load_workbook(f)["To check"].iter_rows(min_row=2, values_only=True)] == ["docket:1", "docket:2"]
 
 
 def test_a_file_held_for_a_moment_is_still_saved(tmp_path, monkeypatch):

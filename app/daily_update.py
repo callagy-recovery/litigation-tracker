@@ -932,7 +932,7 @@ def run(a, token, gi_key):
         step and every document read, and if anything fails, so nothing found is lost and nothing is asked twice."""
         save_json(FOUND, found)
         save_json(STATE, state)
-        if asks:
+        if asks or to_check.unwritten(store):  # also rows held back last time because To check.xlsx was open
             f, n = to_check.add(ROOT, store, asks)
             written["file"], written["added"] = f or written["file"], written["added"] + n
             asks.clear()
@@ -1027,7 +1027,9 @@ def run(a, token, gi_key):
         say(f"  {v:>4}  {k}")
     say(f"  {added:>4}  New rows to check by hand" + (f": {f}" if f else ""))
     say(f"  {moved:>4}  Settled rows moved off the To check list (kept on each file's Settled sheet)")
-    say(f"  {to_check.open_count(store):>4}  Rows waiting for an answer in the {to_check.FOLDER} folder")
+    say(f"  {to_check.open_count(store):>4}  Rows waiting for an answer in {to_check.FOLDER}\\{to_check.FILE}")
+    if to_check.unwritten(store):
+        say(f"  {to_check.unwritten(store):>4}  Rows not added yet: {to_check.FILE} was open in Excel. Close it; the next run adds them.")
     later = len(queue) + len(waiting_dockets(state))
     if later:
         say(f"  {later:>4}  Not reached today: done automatically on the next run")

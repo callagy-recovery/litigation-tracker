@@ -1,8 +1,9 @@
-"""The "To check" lists: what the two AI readers could not confirm goes into "To check\\To check <date>.xlsx" for a
-person (or the legal team) to answer. The next daily update reads the answers and shows them on the dashboard, marked
-"Checked by a person". A row is taken off the To check sheet once it is settled - answered by a person, or decided by
-the daily update itself (`settle`) - and kept on the file's "Settled" sheet, where its answer can still be changed.
-A file with no rows left to check moves to "To check\\Done\\".
+"""The "To check" list: what the two AI readers could not confirm is added at the bottom of one file,
+"To check\\To check.xlsx", for a person (or the legal team) to answer; "Added on" is the day it was found. The next
+daily update reads the answers and shows them on the dashboard, marked "Checked by a person". A row is taken off the
+To check sheet once it is settled - answered by a person, or decided by the daily update itself (`settle`) - and kept
+on the file's "Settled" sheet, where its answer can still be changed. (Before 2026-10-27 each day had its own file;
+those are in "To check\\Done\\". Any other .xlsx left in To check\\ is still read and tidied.)
 
 Each item's full details stay in auto\\to_check.json (the workbook only shows them), keyed by a stable key such as
 "docket:<CourtListener id>", "rd:<entry id>" or "state:<file name>", so nothing is asked twice.
@@ -18,13 +19,13 @@ from openpyxl.worksheet.datavalidation import DataValidation
 
 import data
 
-FOLDER, DONE, STORE = "To check", "Done", "to_check.json"
+FOLDER, DONE, STORE, FILE = "To check", "Done", "to_check.json", "To check.xlsx"
 PENDING, WIN, LOSS, LEAVE = "Pending case", "Win", "Loss", "Leave out"
 ANSWERS = (PENDING, WIN, LOSS, LEAVE)
 COLUMNS = ["Case", "Court", "State", "Date", "What it is", "Why it needs a person", "What the readers found", "Link",
-           "Your answer", "Note (optional)", "Key"]
+           "Your answer", "Note (optional)", "Key", "Added on"]
 SETTLED, SETTLED_COLUMNS = "Settled", ["Settled on", "Settled by"]
-WIDTHS = (46, 32, 7, 12, 22, 44, 50, 44, 16, 36, 4)
+WIDTHS = (46, 32, 7, 12, 22, 44, 50, 44, 16, 36, 4, 12)
 HEAD = PatternFill("solid", fgColor="1B2F6B")
 ANSWER = PatternFill("solid", fgColor="FFF7E6")
 READ_ME = [
@@ -34,12 +35,13 @@ READ_ME = [
     "decided yet), Win or Loss (a ruling on enforcing the award), or Leave out (not one for the tracker). Add a note if "
     "you like; for a Win or Loss it is shown as the holding. If the Case, Court, State or Date is wrong, correct it in "
     "the row.",
-    "Then: save the file here, under the same name. The next daily update puts the answers on the dashboard, marked "
-    "'Checked by a person', and moves the answered rows to the Settled sheet. Leave a row empty if you are not sure; "
-    "it stays on the list. The daily update also settles rows by itself when it finds the answer (a ruling both "
-    "readers agree on, a settlement, or a case that is not an enforcement suit); those move to the Settled sheet too, "
-    "with the reason in the Note. To change any answer, change it on the Settled sheet. Once no rows are left to "
-    "check, the file moves to the Done folder.",
+    "Then: save the file here, under the same name, and close it. The next daily update puts the answers on the "
+    "dashboard, marked 'Checked by a person', and moves the answered rows to the Settled sheet. Leave a row empty if "
+    "you are not sure; it stays on the list. The daily update also settles rows by itself when it finds the answer (a "
+    "ruling both readers agree on, a settlement, or a case that is not an enforcement suit); those move to the Settled "
+    "sheet too, with the reason in the Note. To change any answer, change it on the Settled sheet.",
+    "New rows: each daily update adds what it could not confirm at the bottom of the To check sheet; 'Added on' is the "
+    "day it was found. If this file is open in Excel during a run, its new rows are added on the next run instead.",
 ]
 
 
@@ -66,26 +68,40 @@ def item(key, kind, why, row, readers=""):
 
 
 def add(root, store, items, today=None):
-    """Write the items not asked before into today's file. Returns (file or None, how many were added)."""
-    new = [i for i in items if i["key"] not in store]
-    if not new:
-        return None, 0
+    """Record the items not asked before, then add every recorded row not yet in the file at the bottom of
+    To check.xlsx. Returns (file or None, rows added). If the file is open in Excel nothing is lost: the rows stay
+    recorded as unwritten and are added by the next call (the next run)."""
     today = today or dt.date.today()
+    for i in items:
+        if i["key"] not in store:
+            store[i["key"]] = {**i, "asked": today.isoformat(), "unwritten": True}
+    waiting = [i for i in store.values() if i.get("unwritten") and not i.get("answer")]
+    if not waiting:
+        return None, 0
     folder(root).mkdir(exist_ok=True)
-    names = [f"To check {today.isoformat()}.xlsx"] + [f"To check {today.isoformat()} ({n}).xlsx" for n in range(2, 10)]
-    for name in names:
-        try:
-            return _write(folder(root) / name, store, new, today)
-        except PermissionError:  # open in Excel: the rows go into the day's next file instead of being lost
-            continue
-    raise PermissionError(f"Every To check file for {today.isoformat()} is open in Excel; close them and run again.")
+    f = folder(root) / FILE
+    try:
+        _write(f, waiting)
+    except PermissionError:  # open in Excel
+        return None, 0
+    for i in waiting:
+        i.pop("unwritten")
+        i["file"] = FILE
+    return f, len(waiting)
 
 
-def _write(f, store, new, today):
-    """Append the new items to f and only then record them as asked, so a file that cannot be saved loses nothing."""
-    if f.exists():  # a second run on the same day adds to that day's file
+def unwritten(store):
+    """Rows waiting to go into To check.xlsx because it was open in Excel."""
+    return sum(1 for i in store.values() if i.get("unwritten") and not i.get("answer"))
+
+
+def _write(f, new):
+    """Append the rows at the bottom of f's To check sheet (making the file the first time)."""
+    if f.exists():
         wb = openpyxl.load_workbook(f)
         ws = wb["To check"]
+        if ws.cell(1, COLUMNS.index("Added on") + 1).value != "Added on":  # a file from before the column existed
+            ws.cell(1, COLUMNS.index("Added on") + 1, "Added on")
     else:
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -107,14 +123,11 @@ def _write(f, store, new, today):
             how.cell(how.max_row, 1).alignment = Alignment(wrap_text=True, vertical="top")
     for i in new:
         ws.append([i["case"], i.get("court"), i.get("state"), i.get("date"), i["kind"], i["why"], i["readers"],
-                   i.get("url"), None, None, i["key"]])
+                   i.get("url"), None, None, i["key"], i.get("asked")])
         for c in ws[ws.max_row]:
             c.alignment = Alignment(wrap_text=True, vertical="top")
         ws.cell(ws.max_row, 9).fill = ANSWER
     wb.save(f)
-    for i in new:
-        store[i["key"]] = {**i, "file": f.name, "asked": today.isoformat()}
-    return f, len(new)
 
 
 def collect(root, store, say=lambda m: None):
@@ -171,8 +184,9 @@ def settle(store, key, answer, note):
 
 
 def tidy(root, store, say=lambda m: None):
-    """Move every settled row from the To check sheet to the Settled sheet of its file; a file with no rows left to
-    check moves to To check\\Done\\. A file open in Excel is left as it is and tidied next time. Returns rows moved."""
+    """Move every settled row from the To check sheet to the Settled sheet of its file; an older file (not
+    To check.xlsx, which always stays) with no rows left to check moves to To check\\Done\\. A file open in Excel is
+    left as it is and tidied next time. Returns rows moved."""
     moved = 0
     for f in sorted(folder(root).glob("*.xlsx")):
         if f.name.startswith("~$"):
@@ -214,7 +228,7 @@ def tidy(root, store, say=lambda m: None):
             say(f"  {f.name} is open in Excel: its settled rows are moved next time.")
             continue
         moved += len(gone)
-        if not left:
+        if not left and f.name != FILE:
             (f.parent / DONE).mkdir(exist_ok=True)
             try:
                 os.replace(f, f.parent / DONE / f.name)
