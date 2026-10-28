@@ -63,6 +63,7 @@ def where(d):
     return f"{d.get('state')}, {d.get('level') or 'federal'}"
 
 
+SITE_URL = "https://callagy-recovery.github.io/litigation-tracker/"  # the published dashboard (publish.py, GitHub Pages)
 LOGO_CID = "lt-logo"
 THEME = {"brand": "#276ba8", "brandDark": "#184268", "tint": "#edf3f8"}  # the dashboard's colours, taken from the logo
 WIN, LOSS, PEND, INK, MUTED, LINE = "#047857", "#b91c1c", "#2563eb", "#172033", "#667085", "#e3e8f0"
@@ -76,7 +77,7 @@ def _court_short(d):
     return "Federal district court" if d.get("level") == "federal" else "State court"
 
 
-def build(rulings, pending, report_name, today, since=None, theme=None, logo=True):
+def build(rulings, pending, report_name, today, theme=None, logo=True):
     """(subject, html body). A brief, branded newsletter in email-safe HTML (600 px tables, inline styles, no web
     fonts or external images), so it renders in desktop Outlook; readers open the dashboard for the details."""
     t = {**THEME, **(theme or {})}
@@ -134,8 +135,9 @@ def build(rulings, pending, report_name, today, since=None, theme=None, logo=Tru
 
     logo_img = (f"<img src='cid:{LOGO_CID}' width='52' height='48' alt='Callagy Law' style='display:block;border:0'>" if logo is True
                 else f"<img src='{logo}' width='52' height='48' alt='Callagy Law' style='display:block;border:0'>" if logo else "")
+    updated_for = f"{fmt(today)}, {today.year}"  # the newsletter's own date (not the previous newsletter's: user, 2026-10-28)
     preheader = (", ".join(x for x in (rulings and n(len(rulings), "ruling"), pending and n(len(pending), "pending case")) if x)
-                 + (f" since {fmt(since)}." if since else " today."))
+                 + f", updated for {updated_for}.")
     body = (
         f"<div style='display:none;max-height:0;overflow:hidden'>{e(preheader)}</div>"
         f"<table role='presentation' width='100%' cellpadding='0' cellspacing='0' style='background:#f2f5f9'><tr><td align='center' style='padding:24px 12px'>"
@@ -147,7 +149,7 @@ def build(rulings, pending, report_name, today, since=None, theme=None, logo=Tru
         f"<div style='font-size:13px;color:#cfe0f1'>Update · {e(dated)}</div></td></tr></table></td></tr>"
         f"<tr><td style='background:{t['brand']};height:4px;font-size:1px;line-height:4px'>&nbsp;</td></tr>"
         # intro + tiles
-        f"<tr><td style='padding:22px 30px 6px;{FONT};font-size:15px;color:{INK}'>New on the NSA enforcement map {e(f'since the last update on {fmt(since)}' if since else 'today')}.</td></tr>"
+        f"<tr><td style='padding:22px 30px 6px;{FONT};font-size:15px;color:{INK}'>New on the NSA enforcement map, updated for {e(updated_for)}.</td></tr>"
         f"<tr><td style='padding:10px 25px 4px'><table role='presentation' width='100%' cellpadding='0' cellspacing='0'><tr>"
         + tile(len(rulings), "New rulings", t["brand"]) + tile(wins, "Wins", WIN) + tile(len(rulings) - wins, "Losses", LOSS)
         + tile(len(pending), "New cases", PEND) + "</tr></table></td></tr>"
@@ -156,8 +158,9 @@ def build(rulings, pending, report_name, today, since=None, theme=None, logo=Tru
         # call-out
         + f"<tr><td style='padding:24px 30px'><table role='presentation' width='100%' cellpadding='0' cellspacing='0' "
         f"style='background:{t['tint']};border-left:4px solid {t['brand']}'><tr><td style='padding:14px 16px;{FONT};font-size:14px;color:{INK}'>"
-        f"<b style='color:{t['brandDark']}'>See the full details on the dashboard.</b><br>"
-        f"Open <b>Litigation Tracker</b> from Callagy Hub for the map, each ruling's summary and its court order.</td></tr></table></td></tr>"
+        f"<b style='color:{t['brandDark']}'>See the full details on the dashboard</b> "
+        f"(<a href='{SITE_URL}' style='color:{t['brand']};font-weight:600'>Click Here</a>).<br>"
+        f"Or open <b>Litigation Tracker</b> from Callagy Hub for the map, each ruling's summary and its court order.</td></tr></table></td></tr>"
         # footer
         f"<tr><td style='padding:14px 30px 20px;border-top:1px solid {LINE};{FONT};font-size:11px;line-height:16px;color:{MUTED}'>"
         "Callagy Law · internal litigation research. Rulings come from court records and the reviewed report; "
@@ -241,14 +244,13 @@ def run(report, report_name, auto, say, today=None, make_draft=outlook_draft, up
         return f"not due (last draft {state.get('lastDraft') or 'none'}; at most one draft a day)"
     if not new_r and not new_p:
         return "due, but nothing new: no draft"
-    since = dt.date.fromisoformat((state.get("lastDraft") or state["baseline"])[:10])
     logo = find_logo(Path(auto).parent)
     subject, body = build([now["rulings"][k] for k in new_r], [now["pending"][k] for k in new_p], report_name, today,
-                          since=since, logo=bool(logo))
+                          logo=bool(logo))
     saved = make_draft(subject, body, _recipients(auto), logo) or {}
     state.update({"lastDraft": today.isoformat(), "rulings": sorted(set(state["rulings"]) | set(now["rulings"])),
                   "pending": sorted(set(state["pending"]) | set(now["pending"])),
-                  "draft": {"date": today.isoformat(), "since": since.isoformat(), "rulings": new_r, "pending": new_p, **saved}})
+                  "draft": {"date": today.isoformat(), "rulings": new_r, "pending": new_p, **saved}})
     path.write_text(json.dumps(state, indent=1), encoding="utf-8")
     say(f"  Outlook draft saved: {subject}")
     return f"draft saved ({len(new_r)} rulings, {len(new_p)} cases)"
@@ -263,7 +265,7 @@ def refresh(state, path, now, new_r, new_p, report_name, auto, say, today, updat
     pending = [k for k in draft["pending"] if k in now["pending"]] + new_p
     logo = find_logo(Path(auto).parent)
     subject, body = build([now["rulings"][k] for k in rulings], [now["pending"][k] for k in pending], report_name, today,
-                          since=dt.date.fromisoformat(draft["since"]), logo=bool(logo))
+                          logo=bool(logo))
     result, body_hash = update_draft(draft["entryId"], draft.get("bodyHash", ""), subject, body, _recipients(auto))
     if result != "updated":  # sent, deleted or edited: left alone; the new items wait for tomorrow's draft
         return {"sent": "today's draft was already sent", "gone": "today's draft is no longer in Drafts",

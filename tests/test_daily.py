@@ -361,10 +361,11 @@ def test_newsletter_drafts_at_most_daily_and_only_when_there_is_something_new(tm
     assert newsletter.run(report, "r.xlsx", auto, said.append, day + dt.timedelta(days=1), make).startswith("draft saved")
     subject, body, bcc = drafts[0]
     assert subject == "Litigation Tracker · Oct 17, 2026: 1 new ruling, 17 new cases" and bcc == "pat@callagylaw.com; sam@callagyrecovery.com"  # everyone signed up, in BCC
-    assert "Update · Saturday, Oct 17, 2026" in body and "since the last update on Oct 16" in body
+    assert "Update · Saturday, Oct 17, 2026" in body and "updated for Oct 17, 2026." in body and "Oct 16" not in body
     assert "Clinic 2 v. Plan" in body and ">WIN<" in body and "Clinic 1 v. Plan" not in body
     assert ">NJ<" in body and ">15</td>" in body and ">2</td>" in body and "Doc 3" not in body  # cases are counted by state
     assert "The court confirmed the award." not in body and "dashboard" in body  # brief: the details are on the dashboard
+    assert f"href='{newsletter.SITE_URL}'" in body and ">Click Here</a>" in body and "Or open <b>Litigation Tracker</b> from Callagy Hub" in body
     assert "width='600'" in body  # email-safe 600 px layout
     assert newsletter.short_name("Shareef Jandali Plastic Surgery, LLC v. Cigna Health and Life Insurance Co.", "Cigna") == \
         "Shareef Jandali Plastic Surgery v. Cigna"
@@ -395,7 +396,7 @@ def test_a_later_run_the_same_day_adds_to_that_days_draft_while_it_is_unsent(tmp
     assert run(day) == "today's draft updated (+0 rulings, +1 cases)" and len(made) == 1  # same draft, no second one
     entry_id, body_hash, subject, body = updates[-1]
     assert (entry_id, body_hash) == ("E1", "H1") and subject == "Litigation Tracker · Oct 28, 2026: 2 new cases"
-    assert ">CA<" in body and ">NJ<" in body and "since the last update on Oct 27" in body  # the morning's case kept
+    assert ">CA<" in body and ">NJ<" in body and "updated for Oct 28, 2026." in body  # the morning's case kept
     report["pending"]["P4"] = pend(4)
     outcome[0] = "sent"  # sent in the meantime: left alone, and the new case waits for tomorrow
     assert run(day) == "today's draft was already sent; the 1 new items go in tomorrow's draft" and updates[-1][1] == "H2"
