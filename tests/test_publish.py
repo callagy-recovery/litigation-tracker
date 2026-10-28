@@ -83,10 +83,22 @@ def test_push_sends_changes_only_from_main(tmp_path, monkeypatch):
     monkeypatch.setattr(publish, "publish", lambda: site.parent.mkdir(exist_ok=True) or site.write_text(site.name + "x", encoding="utf-8"))
     monkeypatch.setenv("GITHUB_TOKEN", "github_pat_test")
     assert publish.push("Daily update 1") == "website updated on GitHub"  # a local remote: no build request
-    asked = []
-    monkeypatch.setattr(publish.urllib.request, "urlopen", lambda req, timeout: asked.append(req.full_url) or io.BytesIO())
-    assert publish.request_build("https://github.com/callagy-recovery/litigation-tracker.git", "t") == ""
-    assert asked == ["https://api.github.com/repos/callagy-recovery/litigation-tracker/pages/builds"]
+    api = "https://api.github.com/repos/callagy-recovery/litigation-tracker/pages/builds"
+    asked, latest, slept = [], [{"commit": "abc123"}], []
+
+    def urlopen(req, timeout):
+        asked.append((req.get_method(), req.full_url))
+        return io.BytesIO(json.dumps(latest[0]).encode() if req.get_method() == "GET" else b"")
+    monkeypatch.setattr(publish.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(publish.time, "sleep", slept.append)
+    remote_url = "https://github.com/callagy-recovery/litigation-tracker.git"
+    # GitHub started the build of the pushed commit by itself: no second request (it would show as "errored").
+    assert publish.request_build(remote_url, "t", "abc123") == "" and asked == [("GET", api + "/latest")] and slept == []
+    # It never did (still showing the previous commit): wait the minute, then ask once.
+    asked.clear()
+    latest[0] = {"commit": "old999"}
+    assert publish.request_build(remote_url, "t", "abc123") == ""
+    assert asked == [("GET", api + "/latest")] * 7 + [("POST", api)] and sum(slept) == publish.BUILD_WAIT
     assert git("ls-tree", "-r", "--name-only", "main", cwd=remote).split() == [".gitignore", "docs/index.html"]
     monkeypatch.setattr(publish, "publish", lambda: None)
     assert publish.push("Daily update 2") == "website already up to date on GitHub"

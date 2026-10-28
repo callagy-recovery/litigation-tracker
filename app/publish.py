@@ -12,6 +12,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 import urllib.request
 from pathlib import Path
 
@@ -142,19 +143,34 @@ def push(message):
         raise RuntimeError("git push failed: " + p.stderr.replace(token, "[token]").replace(basic, "[token]").strip()[-300:])
     if not changed:
         return "website already up to date on GitHub"
-    return "website updated on GitHub" + request_build(git("remote", "get-url", "origin").stdout.strip(), token)
+    return "website updated on GitHub" + request_build(git("remote", "get-url", "origin").stdout.strip(), token,
+                                                       git("rev-parse", "HEAD").stdout.strip())
 
 
-def request_build(remote, token):
-    """Ask GitHub Pages to build the site now: a push does not always start a build by itself. Returns "" when the
-    build was requested, or a note saying why not (the push itself has worked either way)."""
+BUILD_WAIT, BUILD_POLL = 60, 10  # seconds to wait for GitHub to start the site build by itself, and how often to look
+
+
+def request_build(remote, token, sha=""):
+    """Ask GitHub Pages to build the site, but only if GitHub has not started a build of the pushed commit (sha) by
+    itself within BUILD_WAIT seconds: it usually does, and a second request only makes a duplicate build that GitHub
+    cancels and lists as "errored". Returns "" when a build is under way, or a note saying why not (the push itself
+    has worked either way)."""
     m = re.search(r"github\.com[/:]([^/]+)/([^/]+?)(?:\.git)?$", remote)
     if not m:
         return ""  # not a GitHub repository (the tests' stand-in)
-    req = urllib.request.Request(f"https://api.github.com/repos/{m[1]}/{m[2]}/pages/builds", method="POST", headers={
-        "Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"})
+    api = f"https://api.github.com/repos/{m[1]}/{m[2]}/pages/builds"
+    headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
+    for i in range(BUILD_WAIT // BUILD_POLL + 1):
+        try:
+            with urllib.request.urlopen(urllib.request.Request(api + "/latest", headers=headers), timeout=30) as r:
+                if sha and json.loads(r.read() or b"{}").get("commit") == sha:
+                    return ""  # GitHub started it by itself
+        except (OSError, ValueError):  # no build yet (404), or GitHub not answering: keep waiting, then ask
+            pass
+        if i < BUILD_WAIT // BUILD_POLL:
+            time.sleep(BUILD_POLL)
     try:
-        urllib.request.urlopen(req, timeout=30).close()
+        urllib.request.urlopen(urllib.request.Request(api, method="POST", headers=headers), timeout=30).close()
         return ""
     except OSError as e:  # urllib's HTTPError and URLError are OSErrors
         return f" (the site rebuild could not be requested: {e}; GitHub usually rebuilds by itself)"
