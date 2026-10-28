@@ -2463,6 +2463,22 @@
    "docketId": "73195129",
    "fromOrder": false,
    "status": "Checked by a person: an enforcement suit with no ruling yet."
+  },
+  {
+   "case": "Udani v. Anthem Blue Cross Life and Health Insurance Company",
+   "court": "District Court, C.D. California",
+   "level": "Federal District",
+   "circuit": "9",
+   "state": "CA",
+   "docket": "2:26-cv-12157",
+   "url": "https://www.courtlistener.com/docket/74979737/udani-v-anthem-blue-cross-life-and-health-insurance-company/",
+   "payer": "Anthem Blue Cross Life and Health Insurance Company",
+   "byHand": true,
+   "toCheck": "docket:74979737",
+   "filed": "2026-10-16",
+   "docketId": "74979737",
+   "fromOrder": false,
+   "status": "Checked by a person: an enforcement suit with no ruling yet."
   }
  ],
  "ended": [
@@ -2825,5 +2841,5 @@
    "url": "https://www.cms.gov/files/document/caa-nsa-issuer-requirements-checklist.pdf"
   }
  ],
- "lastRun": "2026-10-28T09:23:37"
+ "lastRun": "2026-10-28T09:46:33"
 }
