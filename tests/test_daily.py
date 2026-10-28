@@ -373,6 +373,37 @@ def test_newsletter_drafts_at_most_daily_and_only_when_there_is_something_new(tm
     assert len(drafts) == 1
 
 
+def test_a_later_run_the_same_day_adds_to_that_days_draft_while_it_is_unsent(tmp_path):
+    import newsletter
+    pend = lambda n, st="NJ": {"case": f"Doc {n} v. Aetna", "court": "D.N.J.", "state": st, "docket": f"3:26-cv-{n}", "filed": "2026-10-10"}  # noqa: E731
+    report = {"decisions": {}, "pending": {"P1": pend(1)}}
+    auto, said, made, updates = tmp_path / "auto", [], [], []
+    auto.mkdir()
+    make = lambda s, b, bcc, logo=None: made.append(s) or {"entryId": "E1", "bodyHash": "H1"}  # noqa: E731
+    outcome = ["updated"]
+
+    def update(entry_id, body_hash, s, b, bcc=""):
+        updates.append((entry_id, body_hash, s, b))
+        return outcome[0], ("H2" if outcome[0] == "updated" else "")
+    day = dt.date(2026, 10, 28)
+    run = lambda d: newsletter.run(report, "r.xlsx", auto, said.append, d, make, update)  # noqa: E731
+    run(day - dt.timedelta(days=1))  # first run: baseline
+    report["pending"]["P2"] = pend(2)
+    assert run(day).startswith("draft saved") and made == ["Litigation Tracker · Oct 28, 2026: 1 new case"]
+    assert run(day) == "today's draft is up to date" and updates == []  # nothing new: the draft is not touched
+    report["pending"]["P3"] = pend(3, "CA")  # found by a second run today (Udani, Oct 28)
+    assert run(day) == "today's draft updated (+0 rulings, +1 cases)" and len(made) == 1  # same draft, no second one
+    entry_id, body_hash, subject, body = updates[-1]
+    assert (entry_id, body_hash) == ("E1", "H1") and subject == "Litigation Tracker · Oct 28, 2026: 2 new cases"
+    assert ">CA<" in body and ">NJ<" in body and "since the last update on Oct 27" in body  # the morning's case kept
+    report["pending"]["P4"] = pend(4)
+    outcome[0] = "sent"  # sent in the meantime: left alone, and the new case waits for tomorrow
+    assert run(day) == "today's draft was already sent; the 1 new items go in tomorrow's draft" and updates[-1][1] == "H2"
+    outcome[0] = "edited"
+    assert run(day).startswith("today's draft was edited by hand, so it was left as it is")
+    assert run(day + dt.timedelta(days=1)).startswith("draft saved") and made[-1].endswith("1 new case")  # P4 tomorrow
+
+
 def test_signup_list_keeps_one_row_per_person(tmp_path):
     import signups
     day = dt.date(2026, 10, 16)

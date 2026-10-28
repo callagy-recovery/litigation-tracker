@@ -4,6 +4,8 @@ Run at the end of each daily update (daily_update.py). At most once a day (MIN_D
 dashboard shows (the newest report plus auto\\found.json) with what earlier newsletters already listed
 (auto\\newsletter.json). If there is something new, it saves a draft in the default Outlook account's Drafts folder;
 it never sends. Nothing new: no draft, and it looks again next run. The first run only notes what exists.
+A later run on the same day adds anything new to that day's draft (found by its Outlook id), but only while it is an
+unsent draft in Drafts that nobody has edited; otherwise the new items go in the next day's draft.
 
 Recipients: everyone subscribed on newsletter\\Newsletter sign-ups.xlsx (signups.py; the dashboard's Sign up button).
 """
@@ -184,15 +186,44 @@ def outlook_draft(subject, body, bcc="", logo=None):
                   "if ($m.logo) { $a = $i.Attachments.Add($m.logo); "
                   "$a.PropertyAccessor.SetProperty('http://schemas.microsoft.com/mapi/proptag/0x3712001F', $m.cid); "
                   "$i.PropertyAccessor.SetProperty('http://schemas.microsoft.com/mapi/id/{00062008-0000-0000-C000-000000000046}/8514000B', $true) }; "
-                  "$i.HTMLBody = $m.body; $i.Save(); 'saved'")
+                  "$i.HTMLBody = $m.body; $i.Save(); 'saved|' + $i.EntryID + '|' + " + _BODY_HASH)
         p = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script], capture_output=True, text=True,
                            timeout=180, env={**os.environ, "LT_MAIL": str(f)})
     if "saved" not in p.stdout:
         raise RuntimeError(f"Outlook could not save the draft: {(p.stderr or p.stdout).strip()[-300:]}")
+    _, entry_id, body_hash = (p.stdout.strip().splitlines()[-1].split("|") + ["", ""])[:3]
+    return {"entryId": entry_id, "bodyHash": body_hash}
 
 
-def run(report, report_name, auto, say, today=None, make_draft=outlook_draft):
-    """The newsletter step. Returns what it did, for the run summary."""
+# The body as Outlook stored it, hashed: a later run updates the draft only while it still has exactly this body, so a
+# draft someone has edited by hand is never overwritten.
+_BODY_HASH = ("[BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash("
+              "[Text.Encoding]::UTF8.GetBytes([string]$i.HTMLBody)))")
+
+
+def outlook_update(entry_id, body_hash, subject, body, bcc=""):
+    """Put a newer newsletter into today's draft, found by its Outlook id. Only while it is still an unsent draft in the
+    Drafts folder that nobody has edited. Returns ("updated", new body hash), or ("sent" | "gone" | "edited", "")."""
+    with tempfile.TemporaryDirectory() as d:
+        f = Path(d) / "mail.json"
+        f.write_text(json.dumps({"id": entry_id, "hash": body_hash, "subject": subject, "body": body, "bcc": bcc}), encoding="utf-8")
+        script = ("$m = Get-Content -Raw -Encoding UTF8 $env:LT_MAIL | ConvertFrom-Json; $o = New-Object -ComObject Outlook.Application; "
+                  "$ns = $o.GetNamespace('MAPI'); try { $i = $ns.GetItemFromID($m.id) } catch { 'gone'; exit }; "
+                  "if ($i.Sent) { 'sent'; exit }; "
+                  "if ($i.Parent.EntryID -ne $ns.GetDefaultFolder(16).EntryID) { 'gone'; exit }; "  # 16 = Drafts
+                  "if ((" + _BODY_HASH + ") -ne $m.hash) { 'edited'; exit }; "
+                  "$i.Subject = $m.subject; $i.BCC = $m.bcc; $i.HTMLBody = $m.body; $i.Save(); 'updated|' + " + _BODY_HASH)
+        p = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script], capture_output=True, text=True,
+                           timeout=180, env={**os.environ, "LT_MAIL": str(f)})
+    out = (p.stdout.strip().splitlines() or [""])[-1]
+    if out.split("|")[0] not in ("updated", "sent", "gone", "edited"):
+        raise RuntimeError(f"Outlook could not update the draft: {(p.stderr or p.stdout).strip()[-300:]}")
+    return out.split("|")[0], (out.split("|") + [""])[1]
+
+
+def run(report, report_name, auto, say, today=None, make_draft=outlook_draft, update_draft=outlook_update):
+    """The newsletter step. Returns what it did, for the run summary. A later run on the day of a draft puts anything
+    new since into that same draft (refresh), while it is still an unsent, unedited draft in Drafts."""
     today = today or dt.date.today()
     path = Path(auto) / STATE_FILE
     state = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
@@ -201,20 +232,50 @@ def run(report, report_name, auto, say, today=None, make_draft=outlook_draft):
         state = {"baseline": today.isoformat(), "rulings": sorted(now["rulings"]), "pending": sorted(now["pending"])}
         path.write_text(json.dumps(state, indent=1), encoding="utf-8")
         return "started: the first draft lists what is new from today"
+    new_r = [k for k in now["rulings"] if k not in set(state["rulings"])]
+    new_p = [k for k in now["pending"] if k not in set(state["pending"])]
     if not due(state, today):
+        draft = state.get("draft") or {}
+        if draft.get("date") == today.isoformat() and draft.get("entryId"):
+            return refresh(state, path, now, new_r, new_p, report_name, auto, say, today, update_draft)
         return f"not due (last draft {state.get('lastDraft') or 'none'}; at most one draft a day)"
-    new_r = [d for k, d in now["rulings"].items() if k not in set(state["rulings"])]
-    new_p = [p for k, p in now["pending"].items() if k not in set(state["pending"])]
     if not new_r and not new_p:
         return "due, but nothing new: no draft"
     since = dt.date.fromisoformat((state.get("lastDraft") or state["baseline"])[:10])
     logo = find_logo(Path(auto).parent)
-    subject, body = build(new_r, new_p, report_name, today, since=since, logo=bool(logo))
-    import signups
-    bcc = "; ".join(signups.recipients(Path(auto).parent))  # everyone subscribed on newsletter\Newsletter sign-ups.xlsx
-    make_draft(subject, body, bcc, logo)
+    subject, body = build([now["rulings"][k] for k in new_r], [now["pending"][k] for k in new_p], report_name, today,
+                          since=since, logo=bool(logo))
+    saved = make_draft(subject, body, _recipients(auto), logo) or {}
     state.update({"lastDraft": today.isoformat(), "rulings": sorted(set(state["rulings"]) | set(now["rulings"])),
-                  "pending": sorted(set(state["pending"]) | set(now["pending"]))})
+                  "pending": sorted(set(state["pending"]) | set(now["pending"])),
+                  "draft": {"date": today.isoformat(), "since": since.isoformat(), "rulings": new_r, "pending": new_p, **saved}})
     path.write_text(json.dumps(state, indent=1), encoding="utf-8")
     say(f"  Outlook draft saved: {subject}")
     return f"draft saved ({len(new_r)} rulings, {len(new_p)} cases)"
+
+
+def refresh(state, path, now, new_r, new_p, report_name, auto, say, today, update_draft):
+    """Today's draft again, with what is new since it was saved added to what it already listed."""
+    draft = state["draft"]
+    if not new_r and not new_p:
+        return "today's draft is up to date"
+    rulings = [k for k in draft["rulings"] if k in now["rulings"]] + new_r
+    pending = [k for k in draft["pending"] if k in now["pending"]] + new_p
+    logo = find_logo(Path(auto).parent)
+    subject, body = build([now["rulings"][k] for k in rulings], [now["pending"][k] for k in pending], report_name, today,
+                          since=dt.date.fromisoformat(draft["since"]), logo=bool(logo))
+    result, body_hash = update_draft(draft["entryId"], draft.get("bodyHash", ""), subject, body, _recipients(auto))
+    if result != "updated":  # sent, deleted or edited: left alone; the new items wait for tomorrow's draft
+        return {"sent": "today's draft was already sent", "gone": "today's draft is no longer in Drafts",
+                "edited": "today's draft was edited by hand, so it was left as it is"}[result] + \
+            f"; the {len(new_r) + len(new_p)} new items go in tomorrow's draft"
+    draft.update(rulings=rulings, pending=pending, bodyHash=body_hash)
+    state.update(rulings=sorted(set(state["rulings"]) | set(new_r)), pending=sorted(set(state["pending"]) | set(new_p)))
+    path.write_text(json.dumps(state, indent=1), encoding="utf-8")
+    say(f"  Outlook draft updated: {subject}")
+    return f"today's draft updated (+{len(new_r)} rulings, +{len(new_p)} cases)"
+
+
+def _recipients(auto):
+    import signups
+    return "; ".join(signups.recipients(Path(auto).parent))  # everyone subscribed on newsletter\Newsletter sign-ups.xlsx

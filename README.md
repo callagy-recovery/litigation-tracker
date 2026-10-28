@@ -206,7 +206,9 @@ The details of each row are kept in `auto\to_check.json`.
   the logo, four number tiles (new rulings, wins, losses, new cases), one line per new ruling with a WIN/LOSS label
   (five at most), a bar chart of the new cases by state, and a pointer to the dashboard for the details. It is built
   in email-safe HTML (600 px tables, logo embedded) so it looks the same in desktop Outlook. Subject: "Litigation Tracker ·
-  Oct 16, 2026: 2 new rulings, 1 new case". If nothing is new, no draft is made. Everyone signed up (below) is put in
+  Oct 16, 2026: 2 new rulings, 1 new case". If nothing is new, no draft is made. If you run the update again the same
+  day and it finds more, it adds them to that day's draft, but only while the draft is still unsent in your Drafts
+  folder and nobody has edited it; otherwise the new items go in the next day's draft. Everyone signed up (below) is put in
   BCC, so recipients do not see each other's addresses. What has been listed is kept in `auto\newsletter.json`.
 - **Newsletter sign-up:** the **Get the newsletter** button at the top right of the dashboard adds the person's work email
   (@callagyrecovery.com or @callagylaw.com; it suggests theirs from their Windows login) to
