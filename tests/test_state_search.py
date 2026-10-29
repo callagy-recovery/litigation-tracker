@@ -115,3 +115,18 @@ def test_paid_services_and_sites_that_forbid_scripts_are_never_fetched():
         with pytest.raises(ss.Blocked):
             ss.Web().get(url)  # refused before any request is made
     assert not ss.NOT_USED.search("www.njcourts.gov") and not ss.NOT_USED.search("www.courtlistener.com")
+
+
+def test_a_leads_to_check_row_settles_once_the_courts_own_order_is_on_the_dashboard():
+    import to_check as tc
+    store = {"statelead:true|anthem|2026-10-28": {"case": "True North Medical of Manhasset v. Anthem companies"},
+             "statelead:alpha|cigna|2026-10-28": {"case": "Alpha Surgery v. Cigna"},
+             "statelead:other|aetna|2026-10-28": {"case": "Other Clinic v. Aetna"}}
+    found = {"decisions": [{"case": "True North Medical of Manhasset, P.C. v. Anthem HealthChoice Assurance, Inc.",
+                            "date": "2026-09-17", "result": "Loss", "source": "State cases (saved by hand)"}], "pending": []}
+    assert ss.settle_leads(store, found, ["Alpha Surgery LLC v. Cigna"]) == 2
+    assert store["statelead:true|anthem|2026-10-28"]["answer"] == "Loss"
+    assert store["statelead:alpha|cigna|2026-10-28"]["answer"] == tc.LEAVE
+    assert "answer" not in store["statelead:other|aetna|2026-10-28"]
+    rows, _ = tc.dashboard_rows(store)
+    assert rows == {"decisions": [], "pending": []}  # the order's own row is the only one on the dashboard

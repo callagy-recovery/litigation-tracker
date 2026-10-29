@@ -790,7 +790,8 @@ def state_search_step(report, state, found, store, asks, progress=lambda: None):
         log.exception("State cases found online failed")
         return None
     say(f"  {s['dashboard']} put on the dashboard, {s['to check']} on the To check list, {s['known']} already known, "
-        f"{s['open']} still open (tried again next run).")
+        f"{s['open']} still open (tried again next run); {s['settled']} To check rows settled (the court's own document "
+        "is on the dashboard now).")
     return s
 
 

@@ -430,5 +430,13 @@
   "source": "https://www.courtlistener.com/opinion/10986690/intraoperative-neurology-servs-pc-v-excellus-bluecross-blueshield/",
   "written": "2026-10-27T13:50:19",
   "summary": "A provider sought to enforce IDR awards of $206,723.80 that the insurer had not paid. The court denied the insurer's motion to dismiss. It held the No Surprises Act creates no standalone private right of action, but does not bar state-law claims to enforce awards, because enforcement is not \"judicial review.\" Contract and quasi-contract claims were adequately pled."
+ },
+ "6092572026|2026-09-17": {
+  "outcome": "Loss",
+  "case": "True North Medical of Manhasset, P.C. v. Anthem HealthChoice Assurance, Inc.",
+  "date": "2026-09-17",
+  "source": "State cases (saved by hand)",
+  "written": "2026-10-29T16:10:57",
+  "summary": "Two affiliated medical practices sought payment of 13 No Surprises Act IDR determinations through New York-law claims. The court dismissed the complaint against all defendants, finding the Act does not expressly create a private right of action to enforce determinations and the state-law claims failed on their own elements. It denied leave to amend as procedurally insufficient."
  }
 }

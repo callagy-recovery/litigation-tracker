@@ -79,6 +79,22 @@
    "final": true,
    "holding": "The court dismissed the provider's action to confirm two NSA IDR awards without prejudice because it lacked personal jurisdiction over the Illinois insurer, and it denied the cross-motion to confirm.",
    "rounds": 1
+  },
+  {
+   "case": "True North Medical of Manhasset, P.C. v. Anthem HealthChoice Assurance, Inc.",
+   "court": "Supreme Court - State of New York, Suffolk County Commercial Division",
+   "level": "State Trial",
+   "circuit": "",
+   "state": "NY",
+   "docket": "609257/2026",
+   "payer": "Anthem HealthChoice Assurance, Inc.",
+   "url": "",
+   "source": "State cases (saved by hand)",
+   "date": "2026-09-17",
+   "result": "Loss",
+   "final": true,
+   "holding": "The court dismissed the providers' state-law claims seeking payment of NSA IDR determinations, holding the NSA gives no private enforcement right and state law cannot supply one, and it denied leave to amend.",
+   "rounds": 1
   }
  ],
  "pending": [
@@ -2841,5 +2857,5 @@
    "url": "https://www.cms.gov/files/document/caa-nsa-issuer-requirements-checklist.pdf"
   }
  ],
- "lastRun": "2026-10-29T09:27:29"
+ "lastRun": "2026-10-29T16:16:50"
 }

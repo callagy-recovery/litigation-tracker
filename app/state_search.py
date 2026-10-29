@@ -363,8 +363,10 @@ def news_result(res, url, how="news report"):
     """(what happened, entries for found.json, why it needs a person or "") for an agreed news reading."""
     if not res["reported"]:
         return "to check", {}, "Both readers say this page does not report a state-court suit to enforce IDR awards."
-    if res["state"] not in data.STATE_NAMES or not re.fullmatch(r"\d{4}-\d\d-\d\d", res["date"]):
-        return "to check", {}, "The page does not give the court's state or the full date."
+    if res["state"] not in data.STATE_NAMES:
+        return "to check", {}, "The sources do not say which state's court it is in."
+    if not re.fullmatch(r"\d{4}-\d\d-\d\d", res["date"]):
+        return "to check", {}, "The sources do not give the full date (with the year), so a person checks it."
     case = data.mask(res["case"])
     row = {"case": case, "court": res["court"], "level": "State Trial", "circuit": "", "state": res["state"],
            "docket": "", "payer": data.mask(split_parties(case)[1]), "url": url, "source": f"State court search ({how})"}
@@ -538,9 +540,10 @@ def update(report, state, found, store, asks, say=print, progress=lambda: None):
                                                 if not x.get("fromNews")]
     for k in ("decisions", "pending"):
         found[k] = [x for x in found[k] if not (x.get("fromNews") and known_case(x["case"], court))]
+    settled = settle_leads(store, found, court)
     known = court + [x["case"] for k in ("decisions", "pending") for x in found[k] if x.get("fromNews")] + [
         i["case"] for i in store.values() if i.get("case")]  # already asked about on To check
-    counts = {"dashboard": 0, "to check": 0, "known": 0, "open": 0}
+    counts = {"dashboard": 0, "to check": 0, "known": 0, "open": 0, "settled": settled}
 
     def done(lead, res):
         for k, items in res["adds"].items():
@@ -567,6 +570,31 @@ def update(report, state, found, store, asks, say=print, progress=lambda: None):
     except reader.ReaderError as e:
         say(f"  Claude stopped: {e}. The rest are tried next run.")
     return counts
+
+
+def settle_leads(store, found, court):
+    """Settle the open To check rows of state leads (State case (found online)) whose case the dashboard now has from
+    the court's own document or the report (court: those case names), e.g. after a person saved the order in
+    State cases\\New. A ruling settles with its result (to_check.dashboard_rows adds no second row for it); otherwise
+    Leave out, as the case is already shown. Returns how many."""
+    import to_check
+    when = dt.date.today().strftime("%b %d, %Y")
+    ruled = [x for x in found["decisions"] if not x.get("fromNews") and not x.get("byHand")]
+    n = 0
+    for key, i in store.items():
+        if not key.startswith("statelead:") or i.get("answer"):
+            continue
+        d = next((x for x in ruled if known_case(i["case"], [x["case"]])), None)
+        if d:
+            to_check.settle(store, key, d["result"], f"Settled by the daily update on {when}: both readers read the "
+                            f"court's ruling of {d.get('date')}.")
+        elif known_case(i["case"], court):
+            to_check.settle(store, key, to_check.LEAVE, f"Settled by the daily update on {when}: the case is already "
+                            "on the dashboard.")
+        else:
+            continue
+        n += 1
+    return n
 
 
 def trial(out=None):
