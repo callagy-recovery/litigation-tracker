@@ -334,6 +334,8 @@ AUTO_FILE = "found.json"  # written by the daily update (app/daily_update.py) in
 AUTO_STALE_DAYS = 3
 AUTO_CAUTION = "Read automatically by the daily update: two AI readers agreed on it. Not reviewed by a person."
 HAND_CAUTION = "Checked by a person on a To check list (the AI readers could not confirm it). Not in the report yet."
+NEWS_CAUTION = ("Read from a {} about the case, not the court's own order: two AI readers agreed on it. Not reviewed by "
+                "a person; replaced by the court's order or the report when either has it.")
 
 
 def _same_case(keys, circuit, state, row):
@@ -374,16 +376,17 @@ def merge_auto(folder, decisions, pending, dol, notes):
             # A companion docket decided the same day is its own ruling, as the editor codes it (NSA-042 and NSA-048).
             continue
         pending[:] = [q for q in pending if not _same_case(keys, circ, st, q)]  # decided now
-        level, win = _text(x.get("level")), x.get("result") == "Win"
+        level, win, news = _text(x.get("level")), x.get("result") == "Win", _text(x.get("fromNews"))
         decisions.append({
             "id": f"AUTO-{i}", "case": m(x.get("case")), "court": m(x.get("court")), "levelText": level,
             "level": _level(level), "appellate": level.casefold() == "federal appellate", "circuit": circ, "state": st,
             "date": _date(x.get("date")), "outcome": "Positive" if win else "Negative", "win": win, "counted": True,
-            "status": "Checked by a person" if x.get("byHand") else ("Final" if x.get("final") else "Not final") + " (read automatically)",
+            "status": "Checked by a person" if x.get("byHand") else ("Final" if x.get("final") else "Not final") + (
+                f" (from a {news})" if news else " (read automatically)"),
             "holding": _one_line(m(x.get("holding")), 400), "url": _safe_url(x.get("url")), "included": True,
-            "caution": HAND_CAUTION if x.get("byHand") else AUTO_CAUTION, "payer": m(x.get("payer")),
-            "insurers": insurers.companies(m(x.get("payer"))), "docket": _text(x.get("docket")), "auto": True,
-            "byHand": bool(x.get("byHand"))})
+            "caution": HAND_CAUTION if x.get("byHand") else NEWS_CAUTION.format(news) if news else AUTO_CAUTION,
+            "payer": m(x.get("payer")), "insurers": insurers.companies(m(x.get("payer"))), "docket": _text(x.get("docket")),
+            "auto": True, "byHand": bool(x.get("byHand")), "fromNews": news})
         count["rulings"] += 1
     for x in found.get("ended") or []:  # settled or voluntarily dismissed: no ruling, no longer pending
         keys, circ, st = place(x)
@@ -400,7 +403,8 @@ def merge_auto(folder, decisions, pending, dol, notes):
                         "filed": _date(x.get("filed")), "docket": _text(x.get("docket")), "status": m(x.get("status")),
                         "url": _safe_url(x.get("url")), "payer": m(x.get("payer")),
                         "insurers": insurers.companies(m(x.get("payer"))), "auto": True, "byHand": bool(x.get("byHand")),
-                        "fromOrder": bool(x.get("fromOrder"))})  # listed in a court's own order (app/nj_stay.py), not read by AI
+                        "fromOrder": bool(x.get("fromOrder")),  # listed in a court's own order (app/nj_stay.py), not read by AI
+                        "fromNews": _text(x.get("fromNews"))})  # read from a news report or web search (app/state_search.py)
         count["pending"] += 1
     if dol is not None:
         titles = {re.sub(r"[^a-z0-9]", "", a["title"].lower()) for a in dol}

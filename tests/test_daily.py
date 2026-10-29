@@ -557,6 +557,7 @@ def test_the_whole_daily_run_hangs_together(tmp_path, monkeypatch):
     monkeypatch.setattr(du, "docket_updates", lambda *a: [])
     monkeypatch.setattr(du, "catch_up", lambda *a: [])
     monkeypatch.setattr(du, "new_dol", lambda *a: 0)
+    monkeypatch.setattr(du, "state_search_step", lambda *a: None)  # its web searches are faked in test_state_search.py
     def summaries_fail(report):  # e.g. CourtListener's request limit: the run must still finish and keep its rows
         raise RuntimeError("HTTP 429 from www.courtlistener.com")
     monkeypatch.setattr(du, "write_summaries", summaries_fail)

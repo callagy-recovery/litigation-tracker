@@ -210,7 +210,7 @@ def write_summaries(report, limit=MAX_SUMMARIES, newest=SUMMARY_NEWEST):
         key, outcome = data.ruling_key(d), "Win" if d["win"] else "Loss"
         if store.get(key, {}).get("outcome") == outcome:
             continue  # already summarised (or tried) for this outcome
-        url = sources.get(key) or (d["url"] if readable(d["url"]) else "")
+        url = sources.get(key) or (d["url"] if readable(d["url"]) and not d.get("fromNews") else "")  # a news page is no order
         if not url:
             done["no readable copy"] += 1
             continue
@@ -779,6 +779,21 @@ def state_step(report, state, found, asks, progress=lambda: None):
     return s
 
 
+def state_search_step(report, state, found, store, asks, progress=lambda: None):
+    """State cases found online (state_search.update); None if it could not run. Never stops the rest of the update."""
+    sys.modules.setdefault("daily_update", sys.modules[__name__])  # state_search imports this module by that name
+    import state_search
+    try:
+        s = state_search.update(report, state, found, store, asks, say, progress)
+    except Exception as e:  # a site or Claude problem must not stop the rest of the update
+        say(f"  skipped: {e}")
+        log.exception("State cases found online failed")
+        return None
+    say(f"  {s['dashboard']} put on the dashboard, {s['to check']} on the To check list, {s['known']} already known, "
+        f"{s['open']} still open (tried again next run).")
+    return s
+
+
 def apply_answers(store, state, found):
     """Put the To check answers on the dashboard (found.json): Pending case, Win and Loss are shown, marked "Checked by
     a person"; Leave out takes the case off. The dockets answered are followed (or not) from now on."""
@@ -1053,6 +1068,10 @@ def run(a, token, gi_key):
                 say(f"  Claude stopped: {e}. The rest are read next run.")
         say("\nState cases saved by hand (State cases\\New)…")
         state_step(report, state, found, asks, save_progress)
+        say("\nState cases found online (web search, NJ courts; two readers each)…")
+        online = state_search_step(report, state, found, store, asks, save_progress)
+        if online:
+            summary["State cases found online put on the dashboard"] = online["dashboard"]
         say(f"\nReading {min(len(queue), a.max_reads)} of {len(queue)} rulings (two readers each)…")
         results = read_queue(api, token, queue, state, found, reader.system_prompt(report["decisions"].values()), a.max_reads, asks, save_progress)
         summary["Rulings put on the dashboard"] = sum(1 for c, r, _ in results if r["agreed"] and r.get("relevant")

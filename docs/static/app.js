@@ -322,6 +322,8 @@
     ? el('span', { class: 'badge badge-auto', text: 'Checked by a person', title: 'The AI readers could not confirm it, so a person checked it. Not in the report yet.' })
     : x.fromOrder
     ? el('span', { class: 'badge badge-auto', text: 'From court order', title: "Listed in the District of New Jersey's stay order of Jan 16, 2026 as a suit to enforce an IDR award. Not read by AI; not in the report yet." })
+    : x.fromNews
+    ? el('span', { class: 'badge badge-auto', text: 'From ' + x.fromNews, title: `Read from a ${x.fromNews} about the case, not the court's own order: two AI readers agreed on it. Not reviewed by a person; not in the report yet.` })
     : el('span', { class: 'badge badge-auto', text: 'Read automatically', title: 'Found and read by the daily update: two AI readers agreed on it. Not reviewed by a person.' }));
   const panel = document.getElementById('panel');
   const backdrop = document.getElementById('backdrop');
@@ -504,7 +506,7 @@
       box.replaceChildren(el('p', { class: 'muted', text: 'No cases in this view.' }));
       return;
     }
-    const result = (c, pending) => (pending ? 'Pending' : c.win ? 'Positive win' : 'Negative loss') + (c.auto ? (c.byHand ? ' checked by a person' : c.fromOrder ? ' from a court order' : ' read automatically') : '');
+    const result = (c, pending) => (pending ? 'Pending' : c.win ? 'Positive win' : 'Negative loss') + (c.auto ? (c.byHand ? ' checked by a person' : c.fromOrder ? ' from a court order' : c.fromNews ? ' from a ' + c.fromNews : ' read automatically') : '');
     box.replaceChildren(
       el('table', { class: 'data cases' },
         el('thead', {}, el('tr', {}, ['Date', 'Case', 'Court', 'State', 'Insurer', 'Result', 'Status', 'Source'].map((h) => el('th', { scope: 'col', text: h })))),

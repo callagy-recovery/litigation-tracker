@@ -217,10 +217,23 @@ The details of each row are kept in `auto\to_check.json`.
   unsubscribes. Everyone Subscribed goes in the BCC of every draft. Open the list read-only, or close it soon: while it is
   open in Excel, sign-ups are refused with "try again in a minute".
 
+## State court cases found online (automatic)
+
+Each daily update also looks for state cases itself (`app\state_search.py`). Claude Code, with only its web search,
+runs searches by state, on news and law-firm sites and on the courts' own sites. The update also checks New Jersey's
+opinion lists and multicounty litigation page. For each case found, it opens the court's document or a free article,
+only where the site allows scripts. It never uses paid services or sites that block scripts. If every page blocks
+scripts, both readers check the case through their own web searches, and their quotes must match word for word.
+What both readers agree on goes on the dashboard marked **"From news report"** or **"From web search"** (not the
+court's own order). The report or the court's own order replaces such a row when either has the case. Anything else
+goes on the To check list as "State case (found online)". A case found once is tried again on each run (up to 10 a
+run) until it is checked, and goes to To check after 5 tries. To try the search without changing anything, run
+`.venv\Scripts\python app\state_search.py`: results go to `State cases\Search trial\`.
+
 ## State court cases (found by hand)
 
-State court records can't be searched by a script: the court sites need logins, show CAPTCHAs or block scripts. So a
-person finds the state cases; everything else is automatic. The printable guide
+Many state court records can't be searched by a script: the court sites need logins, show CAPTCHAs or block scripts.
+So a person can still find state cases and save them; everything else is automatic. The printable guide
 `State cases\How to find state cases.docx` has the weekly checklist (which website, what to type, what to save).
 
 1. **Find** new state rulings or new state enforcement cases, using the guide's checklist.
@@ -264,6 +277,7 @@ libraries and no CDN.
 | `app\reader.py` | Two-level Claude reader the daily update uses |
 | `app\to_check.py` | The To check list (`To check\To check.xlsx`) and the answers from it |
 | `app\state_cases.py` | State cases saved by hand (`State cases\New\`) |
+| `app\state_search.py` | State cases found online (web search, NJ courts), verified by the two readers |
 | `app\newsletter.py`, `app\signups.py` | Newsletter draft and the sign-up list |
 | `app\tools\find_updates.py`, `app\tools\check_dockets.py` | Searches, report matching and docket-entry reading the daily update uses |
 | `app\tools\callagy_cases.sql` | The query for the Callagy case count |
