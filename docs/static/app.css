@@ -38,6 +38,9 @@ code { background: #f1f4f9; padding: .05rem .35rem; border-radius: 4px; font-siz
 .top h1 { font-size: 1.6rem; letter-spacing: .01em; }
 .top p { margin: .15rem 0 0; opacity: .92; }
 .asof { margin: 0; text-align: right; font-size: .9rem; }
+/* The website's disclaimer (app/publish.py adds it under the header; the H: dashboard has none). */
+.disclaimer { margin: 0; padding: .55rem var(--gutter); font-size: .8rem; color: var(--ink-2);
+  background: var(--card); border-bottom: 1px solid var(--line); }
 .top-right { position: relative; display: flex; flex-direction: column; align-items: flex-end; gap: .45rem; }
 .signup-btn { font: inherit; font-size: .85rem; font-weight: 600; color: #fff; background: rgba(255, 255, 255, .14);
   border: 1px solid rgba(255, 255, 255, .55); border-radius: 999px; padding: .3rem .8rem; cursor: pointer; }
@@ -55,8 +58,6 @@ code { background: #f1f4f9; padding: .05rem .35rem; border-radius: 4px; font-siz
 #signup-msg:empty { display: none; }
 .asof-label { opacity: .85; }
 .asof-file { font-size: .78rem; opacity: .8; word-break: break-all; }
-.asof-download { font-size: .8rem; color: inherit; }
-
 /* "new data" banner: stays at the top of the window while scrolling */
 .refresh-banner { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; justify-content: center; gap: .8rem;
   padding: .5rem var(--gutter); background: #fff7e6; color: #7a4b00; border-bottom: 1px solid #f3d9a4; font-weight: 600; }

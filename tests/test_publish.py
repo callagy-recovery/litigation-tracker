@@ -6,7 +6,6 @@ import re
 import shutil
 import subprocess
 
-import openpyxl
 import pytest
 
 import data
@@ -37,32 +36,45 @@ def test_the_website_carries_nothing_private(tmp_path, monkeypatch):
     out = tmp_path / "docs"
     (out / "static").mkdir(parents=True)
     (out / "old-logo.png").write_bytes(b"x")  # left from an earlier publish
+    (out / "data").mkdir()
+    (out / "data" / "litigation-tracker-data.xlsx").write_bytes(b"x")  # the download offered until 2026-10-30
+    monkeypatch.setattr(publish, "points_to_github", lambda name: False)  # the firm's DNS not switched yet
     files = publish.publish(out)
-    assert {"index.html", "robots.txt", ".nojekyll", "static/app.js", "static/views.js", "static/us_states.json",
-            publish.DATA_XLSX, "data/daily-update-results.json"} <= set(files)
-    assert "data/ai-summaries.json" not in files  # no summaries file in auto\, so none published
-    assert "a/s/o ***" in (out / "data/daily-update-results.json").read_text(encoding="utf-8")
-    wb = openpyxl.load_workbook(out / publish.DATA_XLSX)
-    texts = [c.value for ws in wb.worksheets for row in ws.iter_rows() for c in row if isinstance(c.value, str)]
-    assert texts and all(data.mask(t) == t for t in texts if not t.startswith("="))  # nothing left to mask
-    assert any("a/s/o ***" in t for t in texts)
-    assert wb.properties.creator == wb.properties.lastModifiedBy == "Litigation Tracker"
-    assert not any(c.comment for ws in wb.worksheets for row in ws.iter_rows() for c in row)
-    assert payload_of((out / "index.html").read_text(encoding="utf-8"))["dataDownload"] == publish.DATA_XLSX
+    assert "CNAME" not in files  # publishing it early would send the github.io address to a domain not set up
+    assert {"index.html", "robots.txt", ".nojekyll", "static/app.js", "static/views.js", "static/us_states.json"} <= set(files)
+    assert not any(f.startswith("data/") for f in files) and not (out / "data").exists()  # no data files, no download
     assert not (out / "old-logo.png").exists()
     page = (out / "index.html").read_text(encoding="utf-8")
     d = payload_of(page)
     assert d["published"] and d["callagy"] is None and d["version"] is None and "token" not in d["signup"]
     assert "Secret Client" not in page and "Internal memo" not in page and "/download/" not in page
+    assert "dataDownload" not in d and ".xlsx" not in page and "X.Y." not in page
     assert 'name="robots" content="noindex' in page and (out / "robots.txt").read_text() == "User-agent: *\nDisallow: /\n"
     assert 'src="static/app.js"' in page and 'href="/static' not in page  # works from a GitHub project address
+    assert '<p class="disclaimer" role="note">' in page and "not legal advice" in page
+    assert publish.still_internal(page) == []  # no instructions for whoever builds or runs the dashboard
+    assert not any(publish.HIDDEN_FIELDS.match(m["field"]) for m in d["methodology"])
+    (out / "CNAME").write_text(publish.DOMAIN + "\n")  # switched on by an earlier run: a DNS hiccup must not undo it
+    assert "CNAME" in publish.publish(out) and (out / "CNAME").read_text() == publish.DOMAIN + "\n"
+
+
+def test_the_custom_domain_is_used_only_once_it_points_to_github(monkeypatch):
+    import socket
+    import publish
+    answers = {"tracker.callagyrecovery.com": ["129.121.74.237"]}  # today: the wildcard to the firm's own web host
+    monkeypatch.setattr(socket, "gethostbyname_ex", lambda name: (name, [], answers[name]))
+    assert not publish.points_to_github(publish.DOMAIN)
+    answers[publish.DOMAIN] = ["185.199.108.153", "185.199.109.153"]  # after IT adds the CNAME record
+    assert publish.points_to_github(publish.DOMAIN)
+    answers[publish.DOMAIN] = []
+    assert not publish.points_to_github(publish.DOMAIN)
 
 
 def test_staff_names_and_internal_paths_are_reworded():
     import publish
-    note = {"n": ["Added 2026-10-16 from Katie Varner's review of 2026-10-12.",
-                  "Items still under review are in drafts\\Katie_Review_2_2026-10-16.xlsx.", "Clinic a/s/o X.Y. v. Plan"]}
-    assert publish.public(note) == {"n": ["Added 2026-10-16 from an internal review of 2026-10-12.",
+    note = {"n": ["Added 2026-10-16 from Pat Lee's review of 2026-10-12.",
+                  "Items still under review are in drafts\\Pat_Review_2_2026-10-16.xlsx.", "Clinic a/s/o X.Y. v. Plan"]}
+    assert publish.public(note) == {"n": ["",  # a note about who added a row is not for readers
                                           "Items still under review are in an internal file.", "Clinic a/s/o *** v. Plan"]}
 
 
@@ -133,3 +145,61 @@ console.log(JSON.stringify(c.choices.map((only) => globalThis.LTViews.views(c.de
     got = json.loads(subprocess.run(["node", str(script)], capture_output=True, text=True, check=True, encoding="utf-8").stdout)
     for only, js in zip(choices, got):
         assert js == json.loads(json.dumps(data.views(decisions, pending, only))), only
+
+
+def test_the_reports_notes_for_the_dashboard_builder_are_reworded_for_readers():
+    import publish
+    said = {
+        "Companion to NSA-042; likely affected on appeal. Added 2026-10-16 from Pat Lee's review of 2026-10-12.":
+            "Companion to NSA-042; likely affected on appeal.",
+        "Do not heat-map this R&R as a final decision; track final district disposition separately when verified.":
+            "Listed as of the magistrate judge's recommendation; see the status for the district judge's later ruling.",
+        "Consolidated disposition; analyst may count as one decision event rather than four cases.":
+            "Consolidated disposition, covering four cases.",
+        "Strong positive district outcome, but later Second Circuit authority should be displayed.":
+            "Strong positive district outcome, but later Second Circuit authority should be considered.",
+    }
+    for before, after in said.items():
+        assert publish.public(before) == after and not publish.still_internal(after)
+    assert publish.still_internal("Items still under review are in an internal file.") == ["internal file"]
+
+
+def test_a_partys_claim_reads_as_its_claim_and_process_words_are_plain():
+    import publish
+    assert publish.public("Two air ambulance providers sued an insurer for failing to timely pay 33 IDR awards.") == (
+        "Two air ambulance providers sued an insurer, alleging it failed to timely pay 33 IDR awards.")
+    for before in ("Enforcement suit confirmed by both readers; no ruling yet.",
+                   "New enforcement suit found by the daily update; no ruling yet.",
+                   'Rows marked "Read automatically" come from it; the report always wins where both have a case.',
+                   "Read automatically by the daily update: two AI readers agreed on it. Not reviewed by a person.",
+                   data.HAND_CAUTION, data.NEWS_CAUTION.format("news report")):
+        assert publish.still_internal(before) or "report" in before  # each is internal wording today...
+        assert not publish.still_internal(publish.public(before))  # ...and plain on the website
+        assert "the report" not in publish.public(before)
+
+
+
+def test_nonpayment_and_motives_read_as_what_a_party_said():
+    import publish
+    said = {
+        "A provider sought to enforce IDR awards of $206,723.80 that the insurer had not paid.":
+            "A provider sought to enforce IDR awards of $206,723.80 that the provider said the insurer had not paid.",
+        "A provider asked the court to confirm and enforce a $31,500 IDR award that Cigna had not paid.":
+            "A provider asked the court to confirm and enforce a $31,500 IDR award that the provider said Cigna had not paid.",
+        "Providers sued CareFirst to recover unpaid IDR awards.": "Providers sued CareFirst to recover allegedly unpaid IDR awards.",
+        "Healthcare providers sued an insurer to enforce an unpaid No Surprises Act IDR award.":
+            "Healthcare providers sued an insurer to enforce an allegedly unpaid No Surprises Act IDR award.",
+        "The court held the Act gives providers an implied private right of action to enforce unpaid final IDR awards.":
+            "The court held the Act gives providers an implied private right of action to enforce unpaid final IDR awards.",
+        "Negative ruling on a different theory: the provider sued only under state law to collect the unpaid IDR award, to "
+        "get around the NSA private-right question, and the court barred the claims on election of remedies, not preemption.":
+            "Negative ruling on a different theory: the provider brought only state-law claims to collect the IDR award, and "
+            "the court barred them on election of remedies, not preemption.",
+        "Negative result, and the order also threatens Rule 11 sanctions.":
+            "Negative result, and the order also refers to possible Rule 11 sanctions.",
+        "Superseded by Fifth Circuit affirmance; retain as separate decision event.": "Superseded by Fifth Circuit affirmance.",
+        "Appeal pending: appeal from M.D. Fla. dismissal (NSA-053); appeal docket number not yet confirmed.":
+            "Appeal pending: appeal from M.D. Fla. dismissal (NSA-053).",
+    }
+    for before, after in said.items():
+        assert publish.public(before) == after and not publish.still_internal(after)

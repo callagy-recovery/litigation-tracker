@@ -218,7 +218,6 @@ def page_data(published=False):
         for r in payload["resources"]:
             r.pop("token", None)
         payload["report"]["name"] = "report"  # the file name is not shown; only the local filter needs it
-        payload["dataDownload"] = "data/litigation-tracker-data.xlsx"  # written by publish.py next to the page
     return 200, payload
 
 

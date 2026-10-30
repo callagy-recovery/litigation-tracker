@@ -157,12 +157,16 @@ short summary; press Enter to close it. Open dashboards then show a *New data is
    in *Added on*. So is a later ruling in a case the report has already decided.
 6. **Updates the website** (https://callagy-recovery.github.io/litigation-tracker/, for staff without the H: drive). It
    rebuilds `docs\` (`app\publish.py`: patient initials masked, no Callagy case counts, no H:-only files, staff names
-   in notes reworded) and pushes what changed, with any program change, to the public GitHub repository
+   in notes reworded, the report's notes for whoever builds the dashboard reworded or left out, a disclaimer under the
+   header; if a new report brings internal wording the rules do not cover, the window says so) and pushes what changed, with any program change, to the public GitHub repository
    `callagy-recovery/litigation-tracker`. GitHub only shows the files; it runs nothing. This needs git and the
    `GITHUB_TOKEN` Windows user variable (a fine-grained token for that repository only: Contents and Pages, read and
    write; it expires after a year and is then replaced). If the push fails, the window says so; the H: dashboard is
    up to date regardless. Only the `main` branch is ever pushed; `local-history` (the history before the repository
-   went public) stays on H:.
+   went public) stays on H:. Its own address will be **tracker.callagyrecovery.com**: once the firm's DNS has a
+   `CNAME` record `tracker` -> `callagy-recovery.github.io`, the next run publishes the `CNAME` file and GitHub moves
+   the site there (the github.io link forwards to it). Until then (callagyrecovery.com has a wildcard record to the
+   firm's web host) the site stays at the github.io address, so it is never sent to a domain that is not set up.
 
 Anything not reached in one run (Claude's usage limit, CourtListener's 125 searches a day) is simply done on the next
 run; nothing needs to be done by hand. The report always wins: a ruling or case the report already has is not added

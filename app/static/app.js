@@ -100,11 +100,10 @@
       el('span', { class: 'asof-label', text: 'Data as of' }), ' ',
       el('strong', { text: fmtDate(updated ? D.report.autoRun.slice(0, 10) : D.report.date) }),
       updated ? el('span', { class: 'asof-label', text: `, ${time}` }) : null,
-      // The report's file name is not shown, by request; its date is.
-      updated ? el('br') : null,
-      updated ? el('span', { class: 'asof-file', text: `Report of ${fmtDate(D.report.date)} plus the daily update` }) : null,
-      D.dataDownload ? el('br') : null,
-      D.dataDownload ? el('a', { class: 'asof-download', href: D.dataDownload, download: '', text: 'Download the data (Excel)' }) : null].filter(Boolean));
+      // The report's file name is not shown, by request; its date is (on the H: dashboard only: the website names no
+      // source, and offers no download).
+      updated && !D.published ? el('br') : null,
+      updated && !D.published ? el('span', { class: 'asof-file', text: `Report of ${fmtDate(D.report.date)} plus the daily update` }) : null].filter(Boolean));
   }
 
   // ---------- summary strip ----------
