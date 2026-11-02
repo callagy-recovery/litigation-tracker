@@ -198,11 +198,21 @@ def push(message):
     basic = base64.b64encode(f"x-access-token:{token}".encode()).decode()
     env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "GIT_CONFIG_COUNT": "1",
            "GIT_CONFIG_KEY_0": "http.https://github.com/.extraheader", "GIT_CONFIG_VALUE_0": f"AUTHORIZATION: basic {basic}"}
-    p = git("-c", "credential.helper=", "push", "-q", "origin", "main", env=env)
-    if p.returncode:
-        raise RuntimeError("git push failed: " + p.stderr.replace(token, "[token]").replace(basic, "[token]").strip()[-300:])
-    if not changed:
+    clean = lambda s: s.replace(token, "[token]").replace(basic, "[token]").strip()[-300:]  # noqa: E731
+    remote = lambda *a: git("-c", "credential.helper=", *a, env=env)  # noqa: E731
+    # A change made on GitHub itself (a Pages setting adds and removes a CNAME file) is taken in first; without it
+    # GitHub refuses the push. One that clashes with the tracker's own files stops here, with nothing pushed.
+    if remote("ls-remote", "--heads", "origin", "main").stdout.strip():
+        p = remote("pull", "--rebase", "--autostash", "-q", "origin", "main")
+        if p.returncode:
+            git("rebase", "--abort")
+            raise RuntimeError("changes made on GitHub could not be combined with this run's, so nothing was pushed: "
+                               + clean(p.stderr))
+    if git("rev-list", "--count", "origin/main..HEAD").stdout.strip() == "0":  # nothing new, from this run or earlier
         return "website already up to date on GitHub" + note
+    p = remote("push", "-q", "origin", "main")
+    if p.returncode:
+        raise RuntimeError("git push failed: " + clean(p.stderr))
     return "website updated on GitHub" + request_build(git("remote", "get-url", "origin").stdout.strip(), token,
                                                        git("rev-parse", "HEAD").stdout.strip()) + note
 

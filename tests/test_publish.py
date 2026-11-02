@@ -203,3 +203,47 @@ def test_nonpayment_and_motives_read_as_what_a_party_said():
     }
     for before, after in said.items():
         assert publish.public(before) == after and not publish.still_internal(after)
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git not installed")
+def test_push_takes_in_changes_made_on_github_first(tmp_path, monkeypatch):
+    import publish
+    remote, proj, web = tmp_path / "remote.git", tmp_path / "proj", tmp_path / "web"
+    git = lambda *a, cwd=proj, check=True: subprocess.run(publish.GIT + list(a), cwd=cwd, capture_output=True, text=True,  # noqa: E731
+                                                          check=check)
+    git("init", "-q", "--bare", str(remote), cwd=tmp_path)
+    proj.mkdir()
+    git("init", "-q", "-b", "main")
+    git("remote", "add", "origin", str(remote))
+    site = proj / "docs" / "index.html"
+    page = ["day 1"]
+    monkeypatch.setattr(main, "ROOT", proj)
+    monkeypatch.setattr(publish, "publish", lambda: site.parent.mkdir(exist_ok=True) or site.write_text(page[0], encoding="utf-8"))
+    monkeypatch.setenv("GITHUB_TOKEN", "github_pat_test")
+    assert publish.push("Daily update 1") == "website updated on GitHub"
+    # On GitHub: a custom domain typed into Settings > Pages and taken out again (Oct 30, 2026).
+    git("clone", "-q", "-b", "main", str(remote), str(web), cwd=tmp_path)
+    (web / "docs" / "CNAME").write_text("tracker.example.com\n", encoding="utf-8")
+    git("add", "-A", cwd=web), git("commit", "-q", "-m", "Create CNAME", cwd=web)
+    git("rm", "-q", "docs/CNAME", cwd=web), git("commit", "-q", "-m", "Delete CNAME", cwd=web), git("push", "-q", cwd=web)
+    page[0] = "day 2"
+    assert publish.push("Daily update 2") == "website updated on GitHub"  # refused before the fix
+    log = git("log", "--format=%s", "main", cwd=remote).stdout.split("\n")
+    assert log[:4] == ["Daily update 2", "Delete CNAME", "Create CNAME", "Daily update 1"]
+    # A run whose push failed leaves its commit here: the next run sends it even with nothing new of its own.
+    page[0] = "day 3"
+    site.write_text(page[0], encoding="utf-8")
+    git("add", "-A"), git("commit", "-q", "-m", "Daily update 3 (not pushed)")
+    assert publish.push("Daily update 4") == "website updated on GitHub"
+    assert git("log", "-1", "--format=%s", "main", cwd=remote).stdout.strip() == "Daily update 3 (not pushed)"
+    assert publish.push("Daily update 5") == "website already up to date on GitHub"
+    # A change on GitHub to the same page clashes with this run's: nothing is pushed, and nothing is left half done.
+    git("pull", "-q", cwd=web)
+    (web / "docs" / "index.html").write_text("edited on GitHub", encoding="utf-8")
+    git("commit", "-q", "-am", "Edit on GitHub", cwd=web), git("push", "-q", cwd=web)
+    page[0] = "day 6"
+    with pytest.raises(RuntimeError, match="could not be combined"):
+        publish.push("Daily update 6")
+    assert git("log", "-1", "--format=%s", "main", cwd=remote).stdout.strip() == "Edit on GitHub"
+    assert git("log", "-1", "--format=%s").stdout.strip() == "Daily update 6"  # still here, for a person to sort out
+    assert not (proj / ".git" / "rebase-merge").exists() and not (proj / ".git" / "rebase-apply").exists()
