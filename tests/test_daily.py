@@ -552,6 +552,7 @@ def test_the_whole_daily_run_hangs_together(tmp_path, monkeypatch):
         {**CASE, "case": "Agreed v. Plan", "key": "o:1", "date": "2026-10-18", "fetch": [("pdf", "a")]},
         {**CASE, "case": "Disagreed v. Plan", "docket": "2:26-cv-00009", "key": "o:2", "date": "2026-10-18", "fetch": [("pdf", "b")]}])
     monkeypatch.setattr(du, "new_dockets", lambda *a: 0)
+    monkeypatch.setattr(du, "stayed_dockets", lambda *a: 0)
     monkeypatch.setattr(du, "georgetown_leads", lambda *a: 0)
     monkeypatch.setattr(du, "cms_guidance", lambda *a: 0)
     monkeypatch.setattr(du, "docket_updates", lambda *a: [])
@@ -868,8 +869,9 @@ def _daily_env(tmp_path, monkeypatch):
         monkeypatch.setattr(du, name, value)
     monkeypatch.setattr(fu, "ROOT", tmp_path)
     monkeypatch.setattr(du, "check_setup", lambda: (None, "token", "", []))
-    for step in ("new_dockets", "georgetown_leads", "cms_guidance", "new_dol"):
+    for step in ("new_dockets", "stayed_dockets", "georgetown_leads", "cms_guidance", "new_dol"):
         monkeypatch.setattr(du, step, lambda *a: 0)
+    monkeypatch.setattr(du, "state_search_step", lambda *a: None)  # never the web in a test
     for step in ("ruling_candidates", "docket_updates", "catch_up"):
         monkeypatch.setattr(du, step, lambda *a: [])
     monkeypatch.setattr(du, "write_summaries", lambda report: {})
@@ -960,3 +962,27 @@ def test_only_one_daily_update_runs_at_a_time(tmp_path, monkeypatch):
     (tmp_path / "auto" / "daily_update.lock").write_text(json.dumps(old), encoding="utf-8")
     assert du.acquire_lock() is None  # a lock left by a run that died is taken over
     du.release_lock()
+
+
+def test_dnj_cases_stayed_with_the_enforcement_suits_are_found_and_asked_about():
+    import daily_update as du
+    import find_updates as fu
+    hit = lambda did, name, num: {"docket_id": did, "caseName": name, "docketNumber": num, "court_id": "njd",  # noqa: E731
+                                  "court": "District Court, D. New Jersey", "dateFiled": "2026-09-04",
+                                  "absolute_url": f"/docket/{did}/x/", "suitNature": "190 Contract: Other",
+                                  "cause": "28:1332 Diversity-Other Contract", "recap_documents": []}
+
+    class Api:
+        def get(self, url, auth, cl):
+            assert "26-1768" in urllib.parse.unquote_plus(url) and "court=njd" in url
+            return {"results": [hit(1, "Known Clinic v. Cigna", "2:26-cv-00100"), hit(2, "Followed Spine v. UHC", "2:26-cv-00200"),
+                                 hit(3, "New Jersey Orthopaedic Institute, LLC v. Cigna Health and Life Insurance Co.", "2:26-cv-11485"),
+                                 hit(4, "United Healthcare Services, Inc. v. Sood Medical Practice, LLC", "2:26-cv-02921")]}
+    known = [(k, "3", "NJ", "NSA-1") for k in fu.norm_docket("2:26-cv-00100")]
+    state = {"dockets": {"2": {"docket": "2:26-cv-00200"}}}
+    assert du.stayed_dockets(Api(), "token", known, state) == 1  # not the known one, the followed one, or an insurer suing
+    d = state["dockets"]["3"]
+    assert d["docket"] == "2:26-cv-11485" and d["stayedWith"] == du.STAYED_WITH and not d["screened"] and d["circuit"] == "3"
+    asks, found = [], {"pending": []}
+    du.screen_dockets({"dockets": {"3": d}}, found, 10, asks)
+    assert len(asks) == 1 and asks[0]["key"] == "docket:3" and "stayed it pending" in asks[0]["why"] and not found["pending"]

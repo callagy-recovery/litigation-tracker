@@ -482,6 +482,36 @@ def new_dockets(api, token, since, known, state):
     return added
 
 
+# Suits removed from New Jersey state court are filed as contract/diversity cases and never mention the No Surprises
+# Act, so the searches above miss them (University Spine v. UHC, 2026). Since Sept 2026 the District of New Jersey stays
+# each one pending the Third Circuit's consolidated SpecialtyCare appeals, so their dockets cite those appeal numbers.
+STAY_QUERY = '"26-1768" AND SpecialtyCare'
+STAYED_WITH = "the Third Circuit's consolidated SpecialtyCare appeals (26-1768, 26-1769)"
+
+
+def stayed_dockets(api, token, known, state):
+    """D.N.J. dockets stayed with the IDR enforcement suits (STAY_QUERY) that the dashboard does not have: added to
+    state["dockets"] like new_dockets, so their first filing is read (screen_dockets) or a person is asked."""
+    seen, added = state.setdefault("dockets", {}), 0
+    url = f"{fu.CL}/api/rest/v4/search/?" + urllib.parse.urlencode({"type": "r", "q": STAY_QUERY, "court": "njd",
+                                                                     "order_by": "dateFiled desc"})
+    for r in api.get(url, {"Authorization": "Token " + token}, cl=True).get("results", []):
+        c, did = fu.candidate_from_cl(r, "r"), str(r.get("docket_id"))
+        if c is None or did in seen or not provider_v_payer(c["case"]) or fu.match(known, fu.norm_docket(c["docket"]),
+                                                                                   c["circuit"], c["state"]):
+            continue
+        docs = sorted((d for d in r.get("recap_documents") or [] if d.get("filepath_local") and not d.get("attachment_number")),
+                      key=lambda d: (d.get("document_number") or 0))  # the main documents only, never exhibits
+        seen[did] = {"case": data.mask(c["case"]), "court": c["court"], "level": c["level"], "circuit": c["circuit"],
+                     "state": c["state"], "filed": c["date"], "docket": c["docket"], "url": c["url"],
+                     "payer": data.mask(fu.split_parties(c["case"])[1]), "docketId": did,
+                     "doc": "https://storage.courtlistener.com/" + docs[0]["filepath_local"] if docs else "",
+                     "nature": r.get("suitNature") or "", "cause": r.get("cause") or "", "stayedWith": STAYED_WITH,
+                     "enforcement": None, "screened": False}
+        added += 1
+    return added
+
+
 def main_document(url):
     """A RECAP link to an attachment ('...moed.231846.1.2.pdf') -> the main document of that entry ('...1.0.pdf')."""
     return re.sub(r"(\.\d+)\.[1-9]\d*\.pdf$", r"\1.0.pdf", url or "")
@@ -516,6 +546,9 @@ def screen_dockets(state, found, limit, asks, progress=lambda: None):
             verdict = reader.screen(pdf_text(d["doc"]), d["case"]) if d["doc"] else None
             if not d["doc"]:
                 why = "No free copy of the first filing on CourtListener."
+                if d.get("stayedWith"):  # found by stayed_dockets: say why it is likely one
+                    why += (f" The court stayed it pending {d['stayedWith']}, as it does the suits to enforce IDR "
+                            "awards, so it is probably one: answer Pending case if it is, Leave out if not.")
         except reader.Declined:  # this filing only; the step carries on
             verdict = None
             d["declined"] = True
@@ -1028,6 +1061,8 @@ def run(a, token, gi_key):
                   lambda: ruling_candidates(api, token, gi_key, since, known, state)),
                  ("Leads from Georgetown's Health Care Litigation Tracker", lambda: georgetown_leads(state, report, asks)),
                  ("New cases (CourtListener)", lambda: new_dockets(api, token, since, known, state)),
+                 ("Cases stayed with the IDR enforcement suits (D.N.J., CourtListener)",
+                  lambda: stayed_dockets(api, token, known, state)),
                  ("Updates on every case already followed (CourtListener)", lambda: docket_updates(api, token, since - dt.timedelta(days=DOCKET_LOOKBACK_DAYS), report, state, found,
                                         history_to_check(store, state))),
                  ("Earlier entries of newly added cases (CourtListener)", lambda: catch_up(api, token, state, found)),

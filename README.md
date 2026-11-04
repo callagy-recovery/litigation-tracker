@@ -140,7 +140,10 @@ short summary; press Enter to close it. Open dashboards then show a *New data is
    (cms.gov/initiatives/no-surprise-billing; there is no feed, so the pages are checked for new documents; consumer
    leaflets, portal manuals and data tables are skipped). These go in the DOL actions, marked "Read automatically". State courts get a wider CourtListener search of their own ("No Surprises Act", "surprise
    billing", the statute numbers), because their rulings are worded more loosely. New cases on the No Surprises Act feed
-   of Georgetown's free Health Care Litigation Tracker go on the To check list as leads. It also checks **every case already followed** (the report's pending and decided cases, and every
+   of Georgetown's free Health Care Litigation Tracker go on the To check list as leads. Suits removed to the District of
+   New Jersey never mention the No Surprises Act (they are filed as contract cases), so it also looks for D.N.J. dockets
+   stayed pending the Third Circuit's SpecialtyCare appeals (26-1768, 26-1769), as the court stays the enforcement suits;
+   new ones are checked like any new case, or go on the To check list when their first filing is not free. It also checks **every case already followed** (the report's pending and decided cases, and every
    case it found earlier) for new court entries: rulings, settlements and voluntary dismissals. It looks back to a few
    days before its last run.
 3. **Has two AI readers check each one,** using your own signed-in Claude account: Sonnet first, then Opus on its own,
