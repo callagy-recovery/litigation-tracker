@@ -157,6 +157,10 @@ def publish(out=None):
         written["CNAME"] = DOMAIN + "\n"
     for name in STATIC_FILES:
         written[f"static/{name}"] = (main.STATIC / name).read_bytes()
+    # The Callagy UI kit goes with the page, at the same relative path as on the H: dashboard (static/vendor/
+    # callagy-ui/<version>/), licences included; GitHub Pages and Vercel serve it like any other file.
+    for rel, path in main.KIT_FILES.items():
+        written[f"static/{rel}"] = path.read_bytes()
     if logo:
         written[logo_name] = logo.read_bytes()
     for rel, content in written.items():

@@ -53,5 +53,6 @@ def test_the_build_bundles_every_library_the_dashboard_imports(monkeypatch):
     monkeypatch.syspath_prepend(str(ROOT / "app" / "tools"))
     import launcher_imports
     found = launcher_imports.imports()
-    assert {"openpyxl", "openpyxl.styles", "docx", "pypdf", "PIL", "http.server", "html.parser", "urllib.request"} <= set(found)
+    # PIL left with the colours read from the logo (the Callagy UI kit's brand colours replaced them, 2026-11-13)
+    assert {"openpyxl", "openpyxl.styles", "docx", "pypdf", "http.server", "html.parser", "urllib.request"} <= set(found)
     assert not set(found) & set(launcher.APP_MODULES)  # the dashboard's own code is read from the share, not bundled

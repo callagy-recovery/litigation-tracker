@@ -29,6 +29,12 @@ FROZEN = getattr(sys, "frozen", False)
 ROOT = (Path(os.environ["LT_ROOT"]) if os.environ.get("LT_ROOT") else
         Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parent.parent)
 STATIC = ROOT / "app" / "static"
+# The Callagy UI kit (H:\Callagy UI, copied pinned into app\static\vendor\callagy-ui\<version>\). Its files sit in
+# sub-folders, so they are served from this list, built once at start-up: a name is looked up, never joined into a path.
+KIT = STATIC / "vendor" / "callagy-ui"
+KIT_FILES = {p.relative_to(STATIC).as_posix(): p for p in KIT.rglob("*") if p.is_file()} if KIT.is_dir() else {}
+KIT_TYPES = {".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
+             ".woff2": "font/woff2", ".txt": "text/plain; charset=utf-8"}
 REPORTS, RESOURCES, ASSETS, LOGS = ROOT / "reports", ROOT / "resources", ROOT / "assets", ROOT / "logs"
 CALLAGY = ROOT / "callagy"  # CSV export of app/tools/callagy_cases.sql (also accepted in reports\)
 AUTO = ROOT / "auto"  # what the daily update found (Daily Update\Litigation Tracker Daily Update.exe)
@@ -36,7 +42,6 @@ APPDATA = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "Litigation Tracke
 INSTANCE = APPDATA / "instance.json"
 IDLE_SECONDS = 60 * 60
 PING = b"litigation-tracker"
-DEFAULT_THEME = {"brand": "#2447a8", "brandDark": "#1b2f6b", "accent": "#3b3b3b", "tint": "#eef2fc"}
 
 log = logging.getLogger("lt")
 # The newsletter Sign up button is the dashboard's only write. Each run gets a fresh code that only this dashboard's own
@@ -63,7 +68,7 @@ def setup_logging():
     log.setLevel(logging.INFO)
 
 
-# ---------- theme from the logo ----------
+# ---------- logo ----------
 
 def find_logo():
     exts = (".png", ".svg", ".jpg", ".jpeg", ".gif", ".webp")
@@ -72,67 +77,9 @@ def find_logo():
     return files[0] if files else None
 
 
-def _hex(rgb):
-    return "#%02x%02x%02x" % tuple(int(max(0, min(255, c))) for c in rgb)
-
-
-def _lum(rgb):
-    def ch(c):
-        c /= 255
-        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
-    r, g, b = (ch(c) for c in rgb)
-    return 0.2126 * r + 0.7152 * g + 0.0722 * b
-
-
-def theme_from_colours(colours):
-    """colours: [(count, (r, g, b))]. Brand = most common saturated colour, darkened until white text reads on it;
-    accent = most common dark neutral (or a deeper brand shade)."""
-    import colorsys
-    sat, dark = [], []
-    for count, rgb in colours:
-        h, light, s = colorsys.rgb_to_hls(*(c / 255 for c in rgb))
-        if s > 0.35 and 0.15 < light < 0.85:
-            sat.append((count, rgb))
-        elif light < 0.35:
-            dark.append((count, rgb))
-    if not sat:
-        return dict(DEFAULT_THEME)
-    brand = max(sat)[1]
-    while (1.05 / (_lum(brand) + 0.05)) < 4.5:  # contrast with white text
-        brand = tuple(c * 0.9 for c in brand)
-    deep = tuple(c * 0.62 for c in brand)
-    accent = max(dark)[1] if dark else deep
-    tint = tuple(255 - (255 - c) * 0.08 for c in brand)
-    return {"brand": _hex(brand), "brandDark": _hex(deep), "accent": _hex(accent), "tint": _hex(tint)}
-
-
-def logo_theme(path):
-    if path is None:
-        return dict(DEFAULT_THEME)
-    try:
-        if path.suffix.lower() == ".svg":
-            import re
-            found = re.findall(r"#([0-9a-fA-F]{6})\b", path.read_text(encoding="utf-8", errors="replace"))
-            counts = {}
-            for h in found:
-                rgb = tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
-                counts[rgb] = counts.get(rgb, 0) + 1
-            return theme_from_colours([(n, rgb) for rgb, n in counts.items()])
-        from PIL import Image
-        with Image.open(path) as im:
-            im = im.convert("RGB")
-            im.thumbnail((96, 96))
-            q = im.quantize(colors=10)
-            pal = q.getpalette()
-            return theme_from_colours([(n, tuple(pal[i * 3:i * 3 + 3])) for n, i in q.getcolors()])
-    except Exception as e:
-        log.warning("Could not read logo colours from %s: %s", path.name, e)
-        return dict(DEFAULT_THEME)
-
-
 # ---------- page ----------
 
-_state = {"report_sig": None, "theme": None}
+_state = {"report_sig": None}
 
 
 def build_page():
@@ -208,7 +155,6 @@ def page_data(published=False):
         "callagy": callagy and {k: callagy[k] for k in ("file", "byState", "byInsurer", "total")},
         "resources": [{k: i[k] for k in ("title", "type", "date", "token", "url", "category", "source", "summary") if k in i}
                       for i in items],
-        "theme": logo_theme(logo),
         "hasLogo": logo is not None,
         "signup": {"formUrl": PUBLISH_SIGNUP_URL} if published else signup_info(),
         "version": None if published else data_version(),
@@ -294,8 +240,9 @@ def filtered_views(query):
 
 def error_page(message, report_name=""):
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Litigation Tracker - problem</title>
-<meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/static/app.css"></head>
-<body class="error-body"><main class="error-card"><h1>The dashboard cannot show this report</h1>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/static/vendor/callagy-ui/1.0/callagy.css"><link rel="stylesheet" href="/static/app.css"></head>
+<body class="cui error-body"><main class="error-card"><h1>The dashboard cannot show this report</h1>
 <p class="error-msg">{html.escape(message)}</p>{f'<p>Report: {html.escape(report_name)}</p>' if report_name else ''}
 <p>Fix the report in <code>{html.escape(str(REPORTS))}</code>, then refresh this page. Details are in
 <code>{html.escape(str(LOGS))}</code>.</p></main></body></html>"""
@@ -315,12 +262,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
+        extra = dict(extra or {})
+        self.send_header("Cache-Control", extra.pop("Cache-Control", "no-store"))  # the kit's files may be kept
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Content-Security-Policy",
                          "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
                          "connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'")
-        for k, v in (extra or {}).items():
+        for k, v in extra.items():
             self.send_header(k, v)
         self.end_headers()
         self.wfile.write(body)
@@ -348,6 +296,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     return self._send(200, logo.read_bytes(), mimetypes.guess_type(logo.name)[0] or "application/octet-stream")
             if route.startswith("/static/"):
                 name = urllib.parse.unquote(route[len("/static/"):])
+                kit = KIT_FILES.get(name)
+                if kit:  # a version folder never changes, so the browser may keep it (no re-reading 1.1 MB from H:)
+                    return self._send(200, kit.read_bytes(), KIT_TYPES.get(kit.suffix, "application/octet-stream"),
+                                      {"Cache-Control": "max-age=31536000, immutable"})
                 f = STATIC / name
                 if "/" not in name and "\\" not in name and f.is_file():
                     return self._send(200, f.read_bytes(), mimetypes.guess_type(name)[0] or "application/octet-stream")

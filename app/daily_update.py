@@ -978,6 +978,33 @@ def release_lock():
     (AUTO / "daily_update.lock").unlink(missing_ok=True)
 
 
+HUB_STATUS = "hub_status.json"  # in ROOT, next to Litigation Tracker.exe: the Callagy Hub reads how fresh the data is
+EXPECTED_EVERY_DAYS = 1  # working days: the update runs every working day
+
+
+def write_hub_status(ok):
+    """The Callagy Hub's freshness file (H:\\Callagy UI\\hub_status.schema.md), written at the end of every run, failed
+    ones too. data_as_of is the last good update (or the report's date before the first one), never just today.
+    Written to a temporary file and swapped in, so the Hub never reads half a file. Never stops the run."""
+    try:
+        found = load_json(FOUND, {})
+        last = (found.get("lastRun") or "")[:10]
+        report = data.newest_report(ROOT / "reports") if (ROOT / "reports").is_dir() else None
+        as_of = max(filter(None, [last, report[1].isoformat() if report else ""]), default="")
+        if not as_of:
+            return
+        body = {"data_as_of": as_of, "refreshed_at": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
+                "expected_every_days": EXPECTED_EVERY_DAYS, "status": "ok" if ok else "error",
+                "note": "Updated with today's court searches and agency updates." if ok else
+                        "Today's update did not finish; the dashboard shows the last good data."}
+        final = ROOT / HUB_STATUS
+        tmp = final.with_name(f"{HUB_STATUS}.{os.getpid()}.tmp")
+        tmp.write_text(json.dumps(body, indent=2), encoding="utf-8")
+        os.replace(tmp, final)  # one step: the Hub sees the old file or the new one, never half
+    except Exception:
+        log.exception("hub_status.json could not be written")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--since", help="look for items on or after this date (default: the last run, or a year before the report)")
@@ -989,18 +1016,23 @@ def main(argv=None):
     exe, token, gi_key, problems = check_setup()
     if problems:
         say("\nCannot run yet:\n  " + "\n  ".join(problems))
+        write_hub_status(False)
         return 2
     busy = acquire_lock()
-    if busy:
+    if busy:  # another run is under way; it writes hub_status.json when it ends
         say("\n" + busy)
         return 3
+    ok = False
     try:
-        return run(a, token, gi_key)
+        code = run(a, token, gi_key)
+        ok = code == 0
+        return code
     except data.DataFileError as e:
         say(f"\nStopped: {e}")
         return 2
-    finally:
+    finally:  # also when anything else fails: the error goes on up, the Hub is told
         release_lock()
+        write_hub_status(ok)
 
 
 def update_website(message):

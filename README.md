@@ -161,7 +161,8 @@ short summary; press Enter to close it. Open dashboards then show a *New data is
 6. **Updates the website** (https://callagy-recovery.github.io/litigation-tracker/, for staff without the H: drive). It
    rebuilds `docs\` (`app\publish.py`: patient initials masked, no Callagy case counts, no H:-only files, staff names
    in notes reworded, the report's notes for whoever builds the dashboard reworded or left out, a disclaimer under the
-   header; if a new report brings internal wording the rules do not cover, the window says so) and pushes what changed, with any program change, to the public GitHub repository
+   header, the Callagy UI kit copied in at the same relative path as on H:, tables without CSV downloads; if a new
+   report brings internal wording the rules do not cover, the window says so) and pushes what changed, with any program change, to the public GitHub repository
    `callagy-recovery/litigation-tracker`. GitHub only shows the files; it runs nothing. This needs git and the
    `GITHUB_TOKEN` Windows user variable (a fine-grained token for that repository only: Contents and Pages, read and
    write; it expires after a year and is then replaced). If the push fails, the window says so; the H: dashboard is
@@ -289,6 +290,8 @@ libraries and no CDN.
 | `app\tools\find_updates.py`, `app\tools\check_dockets.py` | Searches, report matching and docket-entry reading the daily update uses |
 | `app\tools\callagy_cases.sql` | The query for the Callagy case count |
 | `app\static\` | Page (`index.html`, `app.js`, `app.css`), map shapes (`us_states.json`), icon |
+| `app\static\vendor\callagy-ui\1.0\` | The Callagy UI kit 1.0, a pinned copy of `H:\Callagy UI\dist\` (never edited): header, tabs, tiles, tables, drawer, dropdown, dates, the Manrope font. A new kit version goes in a new folder beside it. |
+| `hub_status.json` | Written by every daily update (also a failed one) for the Callagy Hub: how fresh the data is (`H:\Callagy UI\hub_status.schema.md`) |
 | `app\tools\build.ps1` | Runs the tests, then builds both exes |
 | `app\tools\make_map.cjs` | Regenerates `us_states.json` from the us-atlas package (one-off; needs Node) |
 | `tests\` | pytest suite, including the acceptance checks against the 2026-09-29 report |

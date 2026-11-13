@@ -43,6 +43,8 @@ def test_the_website_carries_nothing_private(tmp_path, monkeypatch):
     assert "CNAME" not in files  # publishing it early would send the github.io address to a domain not set up
     assert {"index.html", "robots.txt", ".nojekyll", "static/app.js", "static/views.js", "static/us_states.json"} <= set(files)
     assert not any(f.startswith("data/") for f in files) and not (out / "data").exists()  # no data files, no download
+    kit = {f"static/{rel}" for rel in main.KIT_FILES}  # the Callagy UI kit goes with the page (same relative path)
+    assert kit and kit <= set(files) and "static/vendor/callagy-ui/1.0/vendor/manrope/OFL.txt" in files  # licences too
     assert not (out / "old-logo.png").exists()
     page = (out / "index.html").read_text(encoding="utf-8")
     d = payload_of(page)

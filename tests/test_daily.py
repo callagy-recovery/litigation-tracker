@@ -581,6 +581,8 @@ def test_the_whole_daily_run_hangs_together(tmp_path, monkeypatch):
 
     assert du.main([]) == 0
     found = json.loads((tmp_path / "auto" / data.AUTO_FILE).read_text(encoding="utf-8"))
+    hub = json.loads((tmp_path / du.HUB_STATUS).read_text(encoding="utf-8"))  # for the Callagy Hub
+    assert hub["status"] == "ok" and hub["expected_every_days"] == 1 and hub["data_as_of"] == found["lastRun"][:10]
     assert sorted((d["case"], d["result"], bool(d.get("byHand"))) for d in found["decisions"]) == [
         ("Agreed v. Plan", "Win", False), ("Answered v. Plan", "Loss", True)]
     wb = openpyxl.load_workbook(tmp_path / tc.FOLDER / tc.FILE)
@@ -986,3 +988,35 @@ def test_dnj_cases_stayed_with_the_enforcement_suits_are_found_and_asked_about()
     asks, found = [], {"pending": []}
     du.screen_dockets({"dockets": {"3": d}}, found, 10, asks)
     assert len(asks) == 1 and asks[0]["key"] == "docket:3" and "stayed it pending" in asks[0]["why"] and not found["pending"]
+
+
+def test_the_hub_is_told_how_fresh_the_data_is_after_every_run(tmp_path, monkeypatch):
+    import daily_update as du
+    monkeypatch.setattr(du, "ROOT", tmp_path)
+    monkeypatch.setattr(du, "FOUND", tmp_path / "auto" / data.AUTO_FILE)
+    (tmp_path / "auto").mkdir()
+    (tmp_path / "reports").mkdir()
+    (tmp_path / "reports" / "NSA_Enforcement_Litigation_Dashboard_Source_2026-10-16.xlsx").write_bytes(b"x")
+    du.write_hub_status(False)  # no update has run yet: the report's own date, and the run failed
+    hub = json.loads((tmp_path / du.HUB_STATUS).read_text(encoding="utf-8"))
+    assert hub["data_as_of"] == "2026-10-16" and hub["status"] == "error" and len(hub["note"]) <= 140
+    assert set(hub) == {"data_as_of", "refreshed_at", "expected_every_days", "status", "note"}  # no other fields
+    assert dt.datetime.fromisoformat(hub["refreshed_at"]).utcoffset() is not None  # with its time-zone offset
+    (tmp_path / "auto" / data.AUTO_FILE).write_text(json.dumps({"lastRun": "2026-11-12T09:12:17"}), encoding="utf-8")
+    du.write_hub_status(True)
+    hub = json.loads((tmp_path / du.HUB_STATUS).read_text(encoding="utf-8"))
+    assert hub["data_as_of"] == "2026-11-12" and hub["status"] == "ok"
+    du.write_hub_status(False)  # a failed run keeps the last good date
+    assert json.loads((tmp_path / du.HUB_STATUS).read_text(encoding="utf-8"))["data_as_of"] == "2026-11-12"
+    assert not list(tmp_path.glob("*.tmp"))  # written whole, then swapped in
+
+
+def test_a_failed_run_still_tells_the_hub(tmp_path, monkeypatch):
+    du = _daily_env(tmp_path, monkeypatch)
+
+    def network_down(*a):
+        raise RuntimeError("network down")
+    monkeypatch.setattr(du, "run", network_down)
+    with pytest.raises(RuntimeError):
+        du.main([])
+    assert json.loads((tmp_path / du.HUB_STATUS).read_text(encoding="utf-8"))["status"] == "error"

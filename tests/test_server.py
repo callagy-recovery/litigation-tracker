@@ -139,10 +139,56 @@ def test_starting_makes_no_desktop_shortcut():
     assert not hasattr(main, "ensure_shortcut") and "powershell" not in inspect.getsource(main).lower()
 
 
-def test_theme_from_logo_colours():
-    t = main.theme_from_colours([(500, (255, 255, 255)), (200, (40, 90, 200)), (90, (60, 60, 60))])
-    assert t["accent"] == "#3c3c3c"
-    assert main.theme_from_colours([(10, (255, 255, 255))]) == main.DEFAULT_THEME
+CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+       "connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'")
+
+
+def test_the_callagy_ui_kit_is_served_and_kept_by_the_browser(server):
+    # Callagy UI kit 1.0 (2026-11-13): its files sit in sub-folders, looked up by exact name, never joined into a path.
+    port, _, _ = server
+    for name, ctype in (("callagy.js", "text/javascript"), ("callagy.css", "text/css"),
+                        ("vendor/manrope/manrope-latin-wght-normal.woff2", "font/woff2"), ("vendor/echarts/LICENSE", "application/octet-stream")):
+        status, headers, body = get(port, f"/static/vendor/callagy-ui/1.0/{name}")
+        assert status == 200 and headers["Content-Type"].startswith(ctype) and body
+        assert headers["Cache-Control"] == "max-age=31536000, immutable"  # a version folder never changes
+        assert headers["Content-Security-Policy"] == CSP  # the security policy is not changed for the kit
+    for tricky in ("vendor/callagy-ui/1.0/../../app.js", "vendor/callagy-ui/1.0/%2e%2e/callagy.js", "vendor%5Ccallagy-ui%5C1.0%5Ccallagy.js",
+                   "vendor/callagy-ui/1.0/nothing.js", "vendor/callagy-ui"):
+        assert get(port, "/static/" + tricky)[0] == 404
+    status, headers, _ = get(port, "/static/app.js")
+    assert status == 200 and headers["Cache-Control"] == "no-store"  # the dashboard's own files are always fresh
+
+
+def test_the_security_policy_is_unchanged():
+    import inspect
+    src = " ".join(inspect.getsource(main.Handler._send).split())  # the header text sits on two source lines
+    assert all(part in src for part in CSP.split("; "))
+
+
+def test_the_kit_copy_is_the_kit_unchanged():
+    # Never edited: every file matches H:\Callagy UI\dist\ (where that folder can be reached).
+    import hashlib
+    from pathlib import Path
+    src = Path(r"H:\Callagy UI\dist")
+    copy = main.STATIC / "vendor" / "callagy-ui" / "1.0"
+    if not src.is_dir():
+        pytest.skip("H:\\Callagy UI not reachable")
+    digest = lambda folder: {p.relative_to(folder).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()  # noqa: E731
+                             for p in folder.rglob("*") if p.is_file()}
+    assert digest(copy) == digest(src)
+    assert set(main.KIT_FILES) == {"vendor/callagy-ui/1.0/" + k for k in digest(src)}
+
+
+def test_the_page_keeps_its_rounding_rule_and_high_contrast_support():
+    js = (main.STATIC / "app.js").read_text(encoding="utf-8")
+    assert "const v = Math.floor(share * 1000 + 1e-9) / 10; // never round up across a colour boundary" in js
+    assert "format: pct" in js  # the states table's win share uses it, never the kit's rounding
+    assert "@media (forced-colors: active) { .state { forced-color-adjust: none; } }" in (main.STATIC / "app.css").read_text(encoding="utf-8")
+    page = (main.STATIC / "index.html").read_text(encoding="utf-8")
+    assert 'href="static/vendor/callagy-ui/1.0/callagy.css"' in page and 'src="/static' not in page  # relative: website too
+    order = [page.index(f'src="static/{f}"') for f in ("vendor/callagy-ui/1.0/vendor/echarts/echarts.min.js",
+                                                         "vendor/callagy-ui/1.0/callagy.js", "views.js", "app.js")]
+    assert order == sorted(order)  # ECharts, then the kit, then the dashboard's own scripts
 
 
 @pytest.mark.skipif(not REPORT.exists(), reason="acceptance report not in reports\\")

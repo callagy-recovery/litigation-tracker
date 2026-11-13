@@ -5,137 +5,139 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Litigation Tracker</title>
 <link rel="icon" href="static/litigation_tracker.ico">
+<!-- Callagy UI kit 1.0 (pinned copy in static\vendor\callagy-ui\1.0), then this dashboard's own few styles. Relative
+     paths: the published website lives under /litigation-tracker/, where "/static/..." would not be found. -->
+<link rel="stylesheet" href="static/vendor/callagy-ui/1.0/callagy.css">
 <link rel="stylesheet" href="static/app.css">
 <script id="data" type="application/json">{{DATA}}</script>
+<script src="static/vendor/callagy-ui/1.0/vendor/echarts/echarts.min.js" defer></script>
+<script src="static/vendor/callagy-ui/1.0/callagy.js" defer></script>
 <script src="static/views.js" defer></script>
 <script src="static/app.js" defer></script>
 </head>
-<body>
-<header class="top">
-  <div class="brand">
-    <span class="logo-tile" id="logo-tile"><img id="logo" src="{{LOGO}}" alt="Callagy Law"></span>
+<body class="cui">
+<header class="cui-header" id="hdr">
+  <div class="cui-header__brand">
+    <img class="cui-header__logo" id="logo" src="{{LOGO}}" alt="Callagy Law">
+    <span class="cui-header__divider" aria-hidden="true"></span>
     <div>
-      <h1>Litigation Tracker</h1>
-      <p>How courts rule when providers try to enforce No Surprises Act arbitration awards</p>
+      <h1 class="cui-header__title">Litigation Tracker</h1>
+      <p class="cui-header__subtitle">How courts rule when providers try to enforce No Surprises Act arbitration awards</p>
     </div>
   </div>
-  <div class="top-right">
-    <p class="asof" id="asof"></p>
-    <button type="button" id="signup-btn" class="signup-btn" aria-expanded="false" aria-controls="signup-pop" hidden>Get the newsletter</button>
-    <div id="signup-pop" class="signup-pop" role="dialog" aria-label="Newsletter sign-up" hidden>
-      <p class="signup-title">Litigation Tracker newsletter</p>
-      <p class="muted small">A short email on the days there are new rulings or cases.</p>
-      <label class="small" for="signup-email">Your work email</label>
-      <input id="signup-email" type="email" autocomplete="email">
-      <p id="signup-msg" class="small" role="status"></p>
-      <div class="signup-actions">
-        <button type="button" id="signup-yes" class="signup-primary">Sign up</button>
-        <button type="button" id="signup-no" class="ins-clear" hidden>Unsubscribe</button>
-        <button type="button" id="signup-close" class="ins-clear">Close</button>
+  <div class="cui-header__meta">
+    <span class="cui-chip" data-cui-asof></span>
+    <div class="signup">
+      <button type="button" id="signup-btn" class="cui-btn" aria-expanded="false" aria-controls="signup-pop" hidden>Get the newsletter</button>
+      <div id="signup-pop" class="signup-pop" role="dialog" aria-label="Newsletter sign-up" hidden>
+        <p class="signup-title">Litigation Tracker newsletter</p>
+        <p class="lt-note">A short email on the days there are new rulings or cases.</p>
+        <label class="lt-note" for="signup-email">Your work email</label>
+        <input id="signup-email" class="cui-input" type="email" autocomplete="email">
+        <p id="signup-msg" class="lt-note" role="status"></p>
+        <div class="signup-actions">
+          <button type="button" id="signup-yes" class="cui-btn cui-btn--primary">Sign up</button>
+          <button type="button" id="signup-no" class="cui-btn" hidden>Unsubscribe</button>
+          <button type="button" id="signup-close" class="cui-btn cui-btn--ghost">Close</button>
+        </div>
       </div>
     </div>
   </div>
 </header>
-
-<div id="refresh-banner" class="refresh-banner" role="status" hidden>
-  <span id="refresh-text">New data is available.</span>
-  <button type="button" id="refresh-btn" class="signup-primary">Refresh</button>
+<div id="refresh-banner" class="cui-banner cui-banner--info cui-banner--page" role="status" hidden>
+  <span class="cui-banner__text" id="refresh-text">New data is available.</span>
+  <button type="button" id="refresh-btn" class="cui-btn cui-btn--primary">Refresh</button>
 </div>
-
-<nav class="tabs" role="tablist" aria-label="Court system">
-  <button role="tab" id="tab-state" data-tab="state" aria-controls="content" aria-selected="true">State courts</button>
-  <button role="tab" id="tab-federal" data-tab="federal" aria-controls="content" aria-selected="false" tabindex="-1">Federal courts</button>
+<nav class="cui-tabs" role="tablist" aria-label="Court system" id="tabs">
+  <button class="cui-tab" role="tab" id="tab-state" data-tab="state" aria-controls="panel-state">State courts</button>
+  <button class="cui-tab" role="tab" id="tab-federal" data-tab="federal" aria-controls="panel-federal">Federal courts</button>
 </nav>
-
-<div class="layout" id="content" role="tabpanel">
+<!-- One panel per tab, as the kit's tabs expect; the page's content moves into whichever panel is open. -->
+<section class="cui-tabpanel" role="tabpanel" id="panel-state" aria-labelledby="tab-state" hidden></section>
+<section class="cui-tabpanel" role="tabpanel" id="panel-federal" aria-labelledby="tab-federal" hidden></section>
+<div class="layout cui-page" id="content">
   <main>
-    <section class="card map-card">
+    <section class="cui-card map-card">
       <div class="strip" id="strip"></div>
       <div class="map-controls">
         <div class="view-switch" id="view-switch" role="radiogroup" aria-label="Which federal decisions to map" hidden>
-          <button role="radio" data-view="federal" aria-checked="true">All decisions</button>
-          <button role="radio" data-view="appellate" aria-checked="false">Appellate or controlling authority only</button>
+          <button type="button" role="radio" data-view="federal" aria-checked="true">All decisions</button>
+          <button type="button" role="radio" data-view="appellate" aria-checked="false">Appellate or controlling authority only</button>
         </div>
         <label class="circuit-toggle" id="circuit-toggle" hidden><input type="checkbox" id="circuit-check" checked> Show circuits</label>
-        <details class="ins-filter" id="ins-filter">
-          <summary>Insurers: <strong id="ins-label">All</strong></summary>
-          <div class="ins-pop">
-            <input id="ins-search" type="search" placeholder="Search insurers" aria-label="Search insurers">
-            <ul id="ins-list" aria-label="Insurers"></ul>
-            <button type="button" id="ins-clear" class="ins-clear">Clear selection</button>
-          </div>
-        </details>
+        <div class="ins-filter" id="ins-filter">
+          <span class="lt-label" id="ins-label">Insurers</span>
+          <div id="ins-select"></div>
+          <button type="button" id="ins-clear" class="cui-btn cui-btn--ghost" hidden>Clear</button>
+        </div>
       </div>
-      <p id="ins-note" class="muted small" role="status"></p>
-      <div class="map-wrap">
+      <p id="ins-note" class="lt-note" role="status"></p>
+      <div class="map-wrap" id="map-wrap">
         <svg id="map" viewBox="0 0 1000 610" aria-label="United States map"></svg>
         <div id="tooltip" class="tooltip" role="status" hidden></div>
       </div>
       <div class="legend" id="legend"></div>
       <p class="footnote" id="footnote"></p>
-      <details class="table-view" id="circuit-list" hidden>
-        <summary>States in each federal circuit</summary>
-        <div id="circuit-states"></div>
-      </details>
-      <details class="table-view">
-        <summary>Table view</summary>
-        <div id="table"></div>
-      </details>
-      <details class="table-view">
-        <summary id="cases-summary">All cases in this view</summary>
-        <input id="cases-search" class="res-search" type="search" placeholder="Search cases: name, court, state, insurer, result"
-               aria-label="Search cases in this view" title="Newest first: decision date for rulings, filing date for pending cases">
-        <div id="cases"></div>
-      </details>
     </section>
-
-    <section class="card">
+    <section class="cui-card">
+      <div class="cui-card__head"><div><h2 class="cui-card__title">States in this view</h2>
+        <p class="cui-card__sub">Click a row to open the state's decisions and pending cases.</p></div></div>
+      <div class="cui-card__body"><div id="table"></div></div>
+    </section>
+    <section class="cui-card" id="cases-card">
+      <div class="cui-card__head"><div><h2 class="cui-card__title">All cases in this view</h2>
+        <p class="cui-card__sub">Newest first: decision date for rulings, filing date for pending cases. Click a row to open its state.</p></div></div>
+      <div class="cui-card__body"><div id="cases"></div></div>
+    </section>
+    <section class="cui-card" id="circuit-list" hidden>
+      <div class="cui-card__head"><div><h2 class="cui-card__title">States in each federal circuit</h2></div></div>
+      <div class="cui-card__body"><div id="circuit-states"></div></div>
+    </section>
+    <section class="cui-card">
       <details class="about">
-        <summary><h2>Department of Labor actions <span id="dol-count" class="muted"></span></h2></summary>
+        <summary><h2 class="cui-card__title">Department of Labor actions <span id="dol-count" class="lt-note"></span></h2></summary>
         <div id="dol"></div>
       </details>
     </section>
-
-    <section class="card">
-      <h2>Data notes</h2>
+    <section class="cui-card">
+      <h2 class="cui-card__title">Data notes</h2>
       <div id="notes"></div>
     </section>
-
-    <section class="card">
+    <section class="cui-card">
       <details class="about">
-        <summary><h2>About this data</h2></summary>
+        <summary><h2 class="cui-card__title">About this data</h2></summary>
         <div id="about"></div>
       </details>
     </section>
   </main>
-
   <div class="side">
-    <section class="card latest" aria-labelledby="latest-title">
-      <h2 id="latest-title">Latest rulings</h2>
-      <p class="muted small" id="latest-sub">Newest first, for the tab, view and insurers chosen.</p>
+    <section class="cui-card latest" aria-labelledby="latest-title">
+      <h2 class="cui-card__title" id="latest-title">Latest rulings</h2>
+      <p class="lt-note" id="latest-sub">Newest first, for the tab, view and insurers chosen.</p>
       <ol id="latest"></ol>
-      <button type="button" id="latest-more" class="ins-clear" hidden>Show 5 more</button>
+      <button type="button" id="latest-more" class="cui-btn" hidden>Show 5 more</button>
     </section>
-    <aside class="card resources" aria-labelledby="res-title">
-      <h2 id="res-title">Resources</h2>
-      <p class="muted small">Court opinions, agency updates and news, newest first. Click one to open or download it.</p>
-      <input id="res-search" class="res-search" type="search" placeholder="Search resources" aria-label="Search resources" hidden>
-      <p id="res-count" class="muted small" aria-live="polite"></p>
+    <aside class="cui-card resources" aria-labelledby="res-title">
+      <h2 class="cui-card__title" id="res-title">Resources</h2>
+      <p class="lt-note">Court opinions, agency updates and news, newest first. Click one to open or download it.</p>
+      <input id="res-search" class="cui-input res-search" type="search" placeholder="Search resources" aria-label="Search resources" hidden>
+      <p id="res-count" class="lt-note" aria-live="polite"></p>
       <ul id="resources"></ul>
     </aside>
   </div>
 </div>
-
-<div class="backdrop" id="backdrop" hidden></div>
-<aside class="panel" id="panel" role="dialog" aria-modal="true" aria-labelledby="panel-title" hidden>
-  <div class="panel-head">
-    <div>
-      <h2 id="panel-title"></h2>
-      <p id="panel-sub" class="muted"></p>
+<div class="cui-drawer" id="drawer" hidden>
+  <div class="cui-drawer__backdrop" data-cui-close></div>
+  <div class="cui-drawer__panel" role="dialog" aria-modal="true" aria-labelledby="panel-title">
+    <div class="cui-drawer__head">
+      <div>
+        <h2 class="cui-drawer__title" id="panel-title"></h2>
+        <p id="panel-sub" class="lt-note"></p>
+      </div>
+      <button class="cui-btn cui-btn--icon cui-btn--ghost" type="button" data-cui-close aria-label="Close">&times;</button>
     </div>
-    <button class="close" id="panel-close" aria-label="Close">&times;</button>
+    <div class="cui-drawer__body" id="panel-body"></div>
   </div>
-  <div id="panel-body"></div>
-</aside>
+</div>
 </body>
 </html>

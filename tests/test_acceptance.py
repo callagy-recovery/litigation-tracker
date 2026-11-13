@@ -80,7 +80,7 @@ def test_patient_initials_never_reach_the_page_or_log(tmp_path, monkeypatch):
     shutil.copy(REPORT, reports / REPORT.name)
     monkeypatch.setattr(main, "REPORTS", reports)
     monkeypatch.setattr(main, "LOGS", tmp_path)
-    monkeypatch.setattr(main, "_state", {"report_sig": None, "theme": None})
+    monkeypatch.setattr(main, "_state", {"report_sig": None})
     main.log.handlers.clear()
     main.setup_logging()
     try:
