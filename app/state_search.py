@@ -572,6 +572,83 @@ def update(report, state, found, store, asks, say=print, progress=lambda: None):
     return counts
 
 
+# ---------- later developments in the state cases already on the dashboard ----------
+# State courts have no docket a script may follow (NYSCEF forbids it), so once a week each state case on the dashboard
+# is looked up on the web: both readers search on their own, as read_by_search does. What they agree on goes on the
+# To check list for a person (an appeal decided can then be answered Win or Loss); nothing goes on the dashboard by
+# itself.
+FOLLOW_EVERY_DAYS = 7
+FOLLOW_RULES = """You check, using web search only, whether anything happened in one state-court lawsuit AFTER a given
+date: an appeal filed, an appeal decided, a new ruling, the case settled or withdrawn, or the case moved to another
+court. Answer about the case in CASE only, using only what the search results say:
+- happened: true only if a search result reports such a development in this exact case, dated after AFTER.
+- kind: "appeal filed", "appeal decided", "new ruling", "settled or withdrawn", "moved" or "none".
+- date: YYYY-MM-DD of the development, only if a result gives the full date; otherwise "".
+- summary: one plain-English sentence on what happened. Never name a patient.
+- quote: copy word for word the one sentence of a search result that best shows it ("" if nothing happened).
+- quotes: that sentence first, then up to two more sentences about it copied word for word from the results.
+- source: the URL of the page the first sentence comes from ("" if nothing happened)."""
+FOLLOW_SCHEMA = {"type": "object", "required": ["happened", "kind", "date", "summary", "quote", "quotes", "source"], "properties": {
+    "happened": {"type": "boolean"},
+    "kind": {"type": "string", "enum": ["appeal filed", "appeal decided", "new ruling", "settled or withdrawn", "moved", "none"]},
+    "date": {"type": "string"}, "summary": {"type": "string"}, "quote": {"type": "string"},
+    "quotes": {"type": "array", "items": {"type": "string"}}, "source": {"type": "string"}}}
+
+
+def check_later(case, after, ask=None):
+    """Both readers, each on their own web search: did anything happen in this state case after `after`? Agreed only
+    when they agree on happened and kind, one quote of each shares SAME_QUOTE letters word for word, and a source is
+    given; a date only one of them gives counts as no date."""
+    task = f"CASE: {case['case']} ({case.get('court', '')}, {case.get('state', '')}{', ' + case['docket'] if case.get('docket') else ''})\nAFTER: {after}"
+    ask = ask or (lambda model: search_call(FOLLOW_RULES, FOLLOW_SCHEMA, task, model=model))
+    a, b = ask(reader.L1), ask(reader.L2)
+    if (a["happened"], a["kind"]) != (b["happened"], b["kind"]):
+        return {**a, "agreed": False}
+    if not a["happened"]:
+        return {**a, "agreed": True}
+    agreed = same_words(a, b) and a["source"].startswith("http")
+    return {**a, "date": a["date"] if a["date"] == b["date"] else "", "agreed": agreed}
+
+
+def follow_up(report, state, found, asks, say=print, progress=lambda: None, ask=None, today=None):
+    """Once every FOLLOW_EVERY_DAYS days per case: later developments in the state cases on the dashboard (the
+    report's and the daily update's), put on the To check list (asks) when both readers agree. Returns counts."""
+    import to_check
+    today = today or dt.date.today()
+    seen = state.setdefault("stateFollowUp", {})
+    rows = [(x, x.get("date") or x.get("filed")) for x in list(report["decisions"].values()) + list(report["pending"].values())
+            if x.get("level") == "state"]
+    rows += [(x, x.get("date") or x.get("filed")) for k in ("decisions", "pending") for x in found.get(k, [])
+             if str(x.get("level", "")).startswith("State")]
+    counts = {"checked": 0, "to check": 0}
+    done = set()
+    for x, after in rows:
+        key = "|".join(names(x["case"]))
+        if not all(names(x["case"])) or key in done:
+            continue
+        done.add(key)
+        last = seen.get(key)
+        if last and (today - dt.date.fromisoformat(last)).days < FOLLOW_EVERY_DAYS:
+            continue
+        info = check_later(x, after or "the case was filed", ask)
+        seen[key] = today.isoformat()
+        counts["checked"] += 1
+        if info["agreed"] and info["happened"]:
+            case = data.mask(x["case"])
+            asks.append(to_check.item(
+                f"statefollow:{key}|{info['kind']}|{info['date'] or today.isoformat()}", "Later development in a state case (found online)",
+                f"Both readers' web searches found this after the dashboard's entry: {data.mask(info['summary'])} Open the link. "
+                "An appeal or a new ruling decided: answer Win or Loss with its date; still open: Pending case; not right or "
+                "nothing new: Leave out. You can also save the court's document in State cases\\New.",
+                {"case": case, "court": x.get("court", ""), "level": "State Trial", "circuit": "", "state": state_code(x.get("state")),
+                 "docket": x.get("docket", ""), "date": info["date"], "url": info["source"], "payer": data.mask(split_parties(case)[1])},
+                f"{info['kind'].capitalize()}: " + " ".join(data.mask(q) for q in [info["quote"]] + info.get("quotes", [])[1:2])))
+            counts["to check"] += 1
+        say(f"  {x['case'][:70]}: {'later development found' if info['agreed'] and info['happened'] else 'nothing new' if info['agreed'] else 'readers did not agree (tried again next week)'}")
+        progress()
+    return counts
+
+
 def settle_leads(store, found, court):
     """Settle the open To check rows of state leads (State case (found online)) whose case the dashboard now has from
     the court's own document or the report (court: those case names), e.g. after a person saved the order in

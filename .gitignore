@@ -15,6 +15,7 @@ newsletter/
 assets/
 video-howto-*/
 Daily Update/
+hub_status.json
 *.exe
 *.lock
 *.bak

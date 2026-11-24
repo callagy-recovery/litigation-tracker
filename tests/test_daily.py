@@ -1020,3 +1020,53 @@ def test_a_failed_run_still_tells_the_hub(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError):
         du.main([])
     assert json.loads((tmp_path / du.HUB_STATUS).read_text(encoding="utf-8"))["status"] == "error"
+
+
+def test_where_a_case_stands_comes_from_its_docket(tmp_path):
+    # Stays, remands, transfers, recommendations, judgments and appeals were recognised but not shown (2026-11-23).
+    import daily_update as du
+    import check_dockets as cd
+    stay = ("STAY AND ADMINISTRATIVE TERMINATION ORDER that this action is stayed pending the Third Circuit's "
+            "adjudication of consolidated appeals. Signed by Judge Stanley R. Chesler on 9/1/2026.")
+    assert cd.entry_label(stay) == "Stayed" and du.status_text("Stayed", stay) == "Stayed"
+    assert du.status_text(cd.entry_label("ORDER granting motion to remand to state court."), "remand") == "Sent back to state court"
+    assert cd.entry_label("NOTICE OF APPEAL to the 3rd Circuit by Clinic.") == "Appeal filed"
+    assert "stay*" in cd.DECISIVE and '"notice of appeal"' in cd.DECISIVE  # the search asks for them too
+    today = dt.date.today().isoformat()
+    r = _merge_setup(tmp_path, {"lastRun": today, "statusUpdates": [
+        {"case": "Doc v. Horizon", "docket": "2:25-cv-00200", "circuit": "3", "state": "NJ", "date": "2026-09-01", "status": "Stayed"},
+        {"case": "Doc v. Horizon", "docket": "25-cv-200", "circuit": "3", "state": "NJ", "date": "2026-10-05", "status": "Sent back to state court"},
+        {"case": "Clinic v. Plan", "docket": "2:25-cv-00100", "circuit": "3", "state": "NJ", "date": "2026-04-01", "status": "Appeal filed"},
+        {"case": "Clinic v. Plan", "docket": "2:25-cv-00100", "circuit": "3", "state": "NY", "date": "2026-05-01", "status": "Stayed"},
+        {"case": "Clinic v. Aetna", "docket": "26-2913", "circuit": "2", "state": "NY", "date": "2026-10-14", "status": "Judgment entered"}],
+        "pending": [{"case": "Clinic v. Aetna", "level": "Federal Appellate", "circuit": "2", "state": "NY",
+                     "docket": "26-2913", "filed": "2026-10-15", "payer": "Aetna", "status": "No ruling yet."}]})
+    assert next(p for p in r["pending"].values() if p["docket"] == "26-2913")["status"] == "No ruling yet."  # lower court's
+    doc = next(p for p in r["pending"].values() if p["docket"] == "2:25-cv-00200")
+    assert doc["status"] == "Sent back to state court on 5 Oct 2026, from the court's docket (read automatically)."  # the newest
+    a = r["decisions"]["A"]
+    assert a["status"].endswith("Appeal filed on 1 Apr 2026, from the court's docket (read automatically)")
+    assert "Stayed" not in a["status"]  # another state's docket, and only an appeal is added to a ruling
+
+
+def test_an_appeal_not_found_by_number_is_looked_for_by_both_parties(monkeypatch):
+    import daily_update as du
+    asked = []
+
+    class Api:
+        def get(self, url, headers=None, body=None, cl=False):
+            q = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)
+            asked.append((q["court"][0], q["q"][0]))
+            return {"results": [{"docket_id": 4722, "caseName": "SpecialtyCare, Inc., et al. v. Kaiser Foundation Health Plan", "docketNumber": "26-4722"},
+                                {"docket_id": 1864, "caseName": "SpecialtyCare Inc v. Meritain Health Inc", "docketNumber": "26-1864"}]}
+    cases = [{"case": "SpecialtyCare, Inc. v. Kaiser Foundation Health Plan, Inc.", "court": "U.S. Court of Appeals for the Ninth Circuit", "docket": ""},
+             {"case": "SpecialtyCare, Inc. et al. v. Aetna, Inc.", "court": "U.S. Court of Appeals for the Third Circuit", "docket": ""},
+             {"case": "SpecialtyCare, Inc. v. Kaiser Foundation Health Plan", "court": "U.S. Court of Appeals for the Ninth Circuit", "docket": "26-9999"},
+             {"case": "AA Med., P.C. v. Aetna", "court": "Supreme Court of the State of New York, Suffolk County", "docket": "604606/2026"}]
+    ids, state = {}, {}
+    assert du.find_appeals(Api(), "t", cases, ids, state) == 1
+    assert ids == {"U.S. Court of Appeals for the Ninth Circuit|": "4722"}  # both parties named; no Aetna; wrong number left
+    assert [c for c, _ in asked] == ["ca9", "ca3", "ca9"] and '"specialtycare" AND "kaiser"' in asked[0][1]  # no state court
+    asked.clear()
+    du.find_appeals(Api(), "t", cases, ids, state)
+    assert asked == []  # the others are looked for again a month later, not every run

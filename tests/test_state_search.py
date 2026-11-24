@@ -130,3 +130,32 @@ def test_a_leads_to_check_row_settles_once_the_courts_own_order_is_on_the_dashbo
     assert "answer" not in store["statelead:other|aetna|2026-10-28"]
     rows, _ = tc.dashboard_rows(store)
     assert rows == {"decisions": [], "pending": []}  # the order's own row is the only one on the dashboard
+
+
+def test_a_state_case_on_the_dashboard_is_looked_up_weekly_for_anything_later():
+    import datetime as dt
+    report = {"decisions": {"S1": {"case": "True North Medical of Manhasset, P.C. v. Anthem HealthChoice Assurance, Inc.",
+                                   "court": "Supreme Court, Suffolk County", "state": "NY", "docket": "609257/2026",
+                                   "date": "2026-09-17", "level": "state"},
+                            "F1": {"case": "Clinic v. Aetna", "level": "federal", "date": "2026-01-01"}}, "pending": {}}
+    said = "The providers filed a notice of appeal to the Appellate Division, Second Department, on October 14, 2026"
+    ans = {"happened": True, "kind": "appeal filed", "date": "2026-10-14", "summary": "The providers appealed.",
+           "quote": said, "quotes": [said], "source": "https://example.org/appeal"}
+    calls = []
+
+    def ask(model):
+        calls.append(model)
+        return dict(ans)
+    state, asks = {}, []
+    c = ss.follow_up(report, state, {"decisions": [], "pending": []}, asks, say=lambda m: None, ask=ask, today=dt.date(2026, 11, 23))
+    assert c == {"checked": 1, "to check": 1} and calls == ["sonnet", "opus"]  # the state case only, both readers
+    assert asks[0]["kind"] == "Later development in a state case (found online)" and asks[0]["state"] == "NY"
+    assert asks[0]["date"] == "2026-10-14" and asks[0]["url"] == "https://example.org/appeal"
+    calls.clear()
+    ss.follow_up(report, state, {"decisions": [], "pending": []}, asks, say=lambda m: None, ask=ask, today=dt.date(2026, 11, 26))
+    assert calls == []  # once a week
+    made_up = lambda model: {**ans, "quote": said if model == "sonnet" else "Anthem won again on appeal in December.", "quotes": []}  # noqa: E731
+    assert not ss.check_later(report["decisions"]["S1"], "2026-09-17", ask=made_up)["agreed"]  # quotes must share words
+    nothing = lambda model: {**ans, "happened": False, "kind": "none", "quote": "", "quotes": [], "source": ""}  # noqa: E731
+    r = ss.check_later(report["decisions"]["S1"], "2026-09-17", ask=nothing)
+    assert r["agreed"] and not r["happened"]

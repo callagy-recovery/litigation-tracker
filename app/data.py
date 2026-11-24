@@ -244,6 +244,12 @@ def _safe_url(v):
     return u if re.match(r"https?://", u, re.I) else ""
 
 
+def _day(iso):
+    """'2026-11-12' -> '12 Nov 2026' (the Callagy UI kit's date format), for dates written into a sentence."""
+    d = dt.date.fromisoformat(iso[:10])
+    return f"{d.day} {d:%b %Y}"
+
+
 def _date(v):
     """ISO date string from a cleaned cell, or '' when it is not a date."""
     s = _text(v)
@@ -406,6 +412,23 @@ def merge_auto(folder, decisions, pending, dol, notes):
                         "fromOrder": bool(x.get("fromOrder")),  # listed in a court's own order (app/nj_stay.py), not read by AI
                         "fromNews": _text(x.get("fromNews"))})  # read from a news report or web search (app/state_search.py)
         count["pending"] += 1
+    # Where a case stands since, from the court's own docket (daily_update.docket_updates): the newest entry becomes a
+    # pending case's status, and an appeal filed after a ruling is added to the ruling's status. Read automatically.
+    ups = found.get("statusUpdates") or []
+
+    def newest(row, only=None):
+        hits = [u for u in ups if _same_case(*place(u), row) and (not only or u.get("status") == only) and _date(u.get("date"))]
+        return max(hits, key=lambda u: _date(u.get("date")), default=None)
+    for q in pending:
+        # An appeal's docket opens with the lower court's judgment ("appeal from judgment entered ..."): only a stay
+        # there is the appeal's own news (True North Medical of Suffolk v. Aetna, 2d Cir. 26-2913, 2026-11-24).
+        u = newest(q, "Stayed" if q.get("appellate") else None)
+        if u and not (u.get("status") == "Stayed" and "stay" in _text(q.get("status")).lower()):  # it already says so
+            q["status"] = f"{m(u.get('status'))} on {_day(u.get('date'))}, from the court's docket (read automatically)."
+    for d in decisions:
+        u = newest(d, "Appeal filed")
+        if u and _date(u.get("date")) >= d["date"]:
+            d["status"] = f"{d['status']} · Appeal filed on {_day(u.get('date'))}, from the court's docket (read automatically)"
     if dol is not None:
         titles = {re.sub(r"[^a-z0-9]", "", a["title"].lower()) for a in dol}
         for x in found.get("dol") or []:

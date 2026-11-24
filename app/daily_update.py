@@ -304,6 +304,59 @@ def ruling_candidates(api, token, gi_key, since, known, state=None):
     return list(out.values())
 
 
+# Court entries that are not rulings but change where a case stands; each becomes the case's status on the dashboard.
+STATUS_LABELS = {"Moved: remanded or transferred", "Stayed", "Recommendation (not final)", "Ended: judgment entered",
+                 "Appeal filed"}
+
+
+def status_text(label, entry):
+    if label.startswith("Moved"):
+        return "Sent back to state court" if re.search(r"remand", entry, re.I) else "Transferred to another court"
+    return {"Stayed": "Stayed", "Recommendation (not final)": "Magistrate judge's recommendation issued (not final)",
+            "Ended: judgment entered": "Judgment entered", "Appeal filed": "Appeal filed"}[label]
+
+
+APPEAL_RETRY_DAYS = 30  # an appeal not on CourtListener is looked for again a month later (appeal dockets reach it late)
+
+
+def party_words(case):
+    """The first distinctive word of each party, e.g. ("specialtycare", "kaiser")."""
+    return tuple(next((w for w in re.findall(r"[a-z]{4,}", side.lower()) if w not in NOT_NAMES), "")
+                 for side in fu.split_parties(case)[:2])
+
+
+def find_appeals(api, token, cases, ids, state, budget=8):
+    """Appeals whose docket CourtListener did not find by number (or that have no number yet), looked for by both
+    parties' names in that court of appeals, each at most once a month. A docket is followed only when it is the one
+    result naming both parties (and carrying the number, when the report has one). Returns how many were found."""
+    tried, today, n = state.setdefault("appealLookups", {}), dt.date.today(), 0
+    for p in cases:
+        key = f"{p['court']}|{p.get('docket') or ''}"
+        code = cd.court_code(p["court"])
+        if ids.get(key) or not code or not code.startswith("ca"):
+            continue
+        last = tried.get(key)
+        if last and (today - dt.date.fromisoformat(last)).days < APPEAL_RETRY_DAYS:
+            continue
+        a, b = party_words(p["case"]) + ("",) * (2 - len(party_words(p["case"])))
+        if not a or not b or budget <= 0:
+            continue
+        budget -= 1
+        tried[key] = today.isoformat()
+        q = urllib.parse.urlencode({"type": "r", "court": code, "q": f'caseName:("{a}" AND "{b}")'})
+        try:
+            results = api.get(f"{fu.CL}/api/rest/v4/search/?{q}", {"Authorization": "Token " + token}, cl=True).get("results", [])
+        except (RuntimeError, OSError):  # CourtListener busy or at its limit: tried again next month
+            return n
+        keys = set(fu.norm_docket(p.get("docket")))
+        hits = [r for r in results if a in (r.get("caseName") or "").lower() and b in (r.get("caseName") or "").lower()
+                and (not keys or keys & set(fu.norm_docket(r.get("docketNumber"))))]
+        if len(hits) == 1:
+            ids[key] = str(hits[0]["docket_id"])
+            n += 1
+    return n
+
+
 def docket_updates(api, token, since, report, state, found, history=None):
     """Court entries since `since` on every case being followed: the report's pending and decided cases, and the
     dockets found earlier. Returns ruling candidates; settlements and voluntary dismissals go straight into
@@ -316,6 +369,7 @@ def docket_updates(api, token, since, report, state, found, history=None):
     cases = list(report["pending"].values()) + list(report["decisions"].values())
     rows = [{"Court": p["court"], "Docket No.": p["docket"], "Case Name": p["case"]} for p in cases if p.get("docket")]
     cd.resolve_ids(api, token, rows, ids, {"left": 40})
+    find_appeals(api, token, cases, ids, state)
     for p in cases:
         did = ids.get(f"{p['court']}|{p.get('docket')}")
         if did:
@@ -356,6 +410,11 @@ def docket_updates(api, token, since, report, state, found, history=None):
                     end = {**{k: p.get(k) for k in ("case", "docket", "circuit", "state")}, "date": date, "status": label}
                     if end not in found["ended"]:  # the long look-back sees the same entry on several runs
                         found["ended"].append(end)
+                elif label in STATUS_LABELS:  # no ruling, but the case moved on: shown as its status (data.merge_auto)
+                    upd = {**{k: p.get(k) for k in ("case", "docket", "circuit", "state")}, "date": date,
+                           "status": status_text(label, desc)}
+                    if upd not in found.setdefault("statusUpdates", []):
+                        found["statusUpdates"].append(upd)
                 elif label in RULING_LABELS:
                     keys = set(data.norm_docket(p["docket"]))
                     if p.get("decided") and any(keys & k and _days(d, date) <= 3 for k, d in decided_on):
@@ -825,6 +884,12 @@ def state_search_step(report, state, found, store, asks, progress=lambda: None):
     say(f"  {s['dashboard']} put on the dashboard, {s['to check']} on the To check list, {s['known']} already known, "
         f"{s['open']} still open (tried again next run); {s['settled']} To check rows settled (the court's own document "
         "is on the dashboard now).")
+    try:  # once a week per case: anything new in the state cases already on the dashboard (appeals, later rulings)
+        f = state_search.follow_up(report, state, found, asks, say, progress)
+        say(f"  Later developments: {f['checked']} state cases looked up, {f['to check']} on the To check list.")
+    except Exception as e:
+        say(f"  Later developments skipped: {e}")
+        log.exception("State case follow-up failed")
     return s
 
 

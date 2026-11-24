@@ -145,7 +145,12 @@ short summary; press Enter to close it. Open dashboards then show a *New data is
    stayed pending the Third Circuit's SpecialtyCare appeals (26-1768, 26-1769), as the court stays the enforcement suits;
    new ones are checked like any new case, or go on the To check list when their first filing is not free. It also checks **every case already followed** (the report's pending and decided cases, and every
    case it found earlier) for new court entries: rulings, settlements and voluntary dismissals. It looks back to a few
-   days before its last run.
+   days before its last run. Entries that are not rulings but change where a case stands (sent back to state court,
+   transferred, stayed, a magistrate judge's recommendation, judgment entered, appeal filed) become the case's status
+   on the dashboard, marked "from the court's docket"; an appeal after a ruling is added to the ruling's status.
+   Appeals CourtListener cannot find by number are looked for by both parties' names, once a month. State cases have
+   no docket a script may follow, so once a week each state case on the dashboard is looked up on the web by both
+   readers; a later appeal or ruling both agree on goes on the To check list.
 3. **Has two AI readers check each one,** using your own signed-in Claude account: Sonnet first, then Opus on its own,
    without seeing the first answer. Each must quote the document word for word; if they disagree, each reads again with
    the other's reason, up to 3 rounds. Scanned PDFs are copied out page by page first. The PDFs saved in State cases\New (below) are

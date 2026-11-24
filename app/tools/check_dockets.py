@@ -12,7 +12,7 @@ import find_updates as fu  # noqa: E402  (shared helpers: CL, norm_docket, split
 
 CHUNK = 25  # dockets per search request
 DECISIVE = ('description:(dismiss* OR judgment OR opinion OR confirm* OR remand* OR stipulat* OR "report and recommendation" '
-            'OR transferr* OR "motion to stay" OR "order staying" OR settle* OR vacat*)')
+            'OR transferr* OR stay* OR settle* OR vacat* OR "notice of appeal")')  # stay*: "STAY AND ADMINISTRATIVE TERMINATION ORDER"
 
 # What kind of entry it is decides whether it can be a ruling at all: only the court's own orders, opinions and
 # judgments count. Motions, notices and briefs are filings, whatever words they contain.
